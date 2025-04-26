@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, PlusCircle, Trash2 } from 'lucide-react';
 
 interface FormData {
   title: string;
@@ -11,7 +11,7 @@ interface FormData {
   form_type: 'survey' | 'assessment' | 'feedback';
   target_group: string;
   deadline: string;
-  questions: string[];
+  questions: { text: string }[];
 }
 
 interface Project {
@@ -31,11 +31,17 @@ function Forms() {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors }
   } = useForm<FormData>({
     defaultValues: {
-      questions: ['']
+      questions: [{ text: '' }]
     }
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: 'questions'
   });
 
   useEffect(() => {
@@ -85,6 +91,7 @@ function Forms() {
         .from('forms')
         .insert([{
           ...data,
+          questions: data.questions.map(q => q.text), // Convert to string array
           created_by: user?.id,
           status: 'active'
         }]);
@@ -129,9 +136,7 @@ function Forms() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Title
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
               <input
                 type="text"
                 className="form-input w-full"
@@ -143,18 +148,14 @@ function Forms() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Project
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
               <select
                 className="form-select w-full"
                 {...register('project_id', { required: 'Project is required' })}
               >
                 <option value="">Select a project</option>
                 {projects.map(project => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
+                  <option key={project.id} value={project.id}>{project.name}</option>
                 ))}
               </select>
               {errors.project_id && (
@@ -163,9 +164,7 @@ function Forms() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Form Type
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Form Type</label>
               <select
                 className="form-select w-full"
                 {...register('form_type', { required: 'Form type is required' })}
@@ -177,9 +176,7 @@ function Forms() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Target Group
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Target Group</label>
               <input
                 type="text"
                 className="form-input w-full"
@@ -188,9 +185,7 @@ function Forms() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Deadline
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Deadline</label>
               <input
                 type="date"
                 className="form-input w-full"
@@ -199,14 +194,46 @@ function Forms() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
               <textarea
                 className="form-input w-full"
                 rows={3}
                 {...register('description', { required: 'Description is required' })}
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Questions</label>
+              {fields.map((field, index) => (
+                <div key={field.id} className="flex items-center gap-2 mb-2">
+                  <input
+                    type="text"
+                    className="form-input w-full"
+                    placeholder={`Question ${index + 1}`}
+                    {...register(`questions.${index}.text`, { required: 'Question is required' })}
+                  />
+                  {fields.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => remove(index)}
+                      className="text-error-600 hover:text-error-700"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {errors.questions && (
+                <p className="mt-1 text-sm text-error-600">All questions must be filled</p>
+              )}
+              <button
+                type="button"
+                onClick={() => append({ text: '' })}
+                className="flex items-center text-primary-600 hover:text-primary-700 mt-2"
+              >
+                <PlusCircle size={16} className="mr-1" />
+                Add Question
+              </button>
             </div>
 
             <button
