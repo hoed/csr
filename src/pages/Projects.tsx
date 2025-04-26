@@ -1,4 +1,3 @@
-// src/pages/Projects.tsx
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FolderPlus, Search, Filter, ArrowDownUp, AlertCircle } from 'lucide-react';

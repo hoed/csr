@@ -1,11 +1,10 @@
-// src/pages/CreateProject.tsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Plus, Trash2 } from 'lucide-react';
 
-// Define ProjectFormData to match database schema
+// Define ProjectFormData
 interface ProjectFormData {
   name: string;
   description: string | null;
@@ -19,6 +18,24 @@ interface ProjectFormData {
   status?: 'Planning' | 'Active' | 'Completed' | 'Cancelled';
   created_by?: string | null;
 }
+
+// Define IndicatorFormData
+interface IndicatorFormData {
+  name: string;
+  value: number;
+  unit: string;
+  category: 'Environmental' | 'Social' | 'Governance';
+}
+
+// Default CSR indicators
+const defaultIndicators: IndicatorFormData[] = [
+  { name: 'Carbon Emissions Reduced', value: 0, unit: 'tons CO2e', category: 'Environmental' },
+  { name: 'Energy Consumption', value: 0, unit: 'kWh', category: 'Environmental' },
+  { name: 'Water Usage', value: 0, unit: 'liters', category: 'Environmental' },
+  { name: 'Jobs Created', value: 0, unit: 'jobs', category: 'Social' },
+  { name: 'Training Hours Provided', value: 0, unit: 'hours', category: 'Social' },
+  { name: 'Compliance Rate', value: 0, unit: '%', category: 'Governance' },
+];
 
 export default function CreateProject() {
   const navigate = useNavigate();
@@ -42,8 +59,9 @@ export default function CreateProject() {
   };
 
   const [formData, setFormData] = useState<ProjectFormData>(initialFormData);
+  const [indicators, setIndicators] = useState<IndicatorFormData[]>(defaultIndicators);
 
-  const validateForm = (data: ProjectFormData) => {
+  const validateForm = (data: ProjectFormData, indicators: IndicatorFormData[]) => {
     if (!data.name) return 'Project name is required';
     if (!data.location) return 'Location is required';
     if (!data.start_date) return 'Start date is required';
@@ -55,7 +73,28 @@ export default function CreateProject() {
     if (data.sdgs.some(sdg => sdg < 1 || sdg > 17)) {
       return 'SDGs must be between 1 and 17';
     }
+    if (indicators.length === 0) return 'At least one indicator is required';
+    for (const indicator of indicators) {
+      if (!indicator.name) return 'Indicator name is required';
+      if (indicator.value < 0) return 'Indicator value cannot be negative';
+      if (!indicator.unit) return 'Indicator unit is required';
+    }
     return null;
+  };
+
+  const addIndicator = () => {
+    setIndicators([...indicators, { name: '', value: 0, unit: '', category: 'Environmental' }]);
+  };
+
+  const updateIndicator = (index: number, field: keyof IndicatorFormData, value: any) => {
+    const updatedIndicators = indicators.map((indicator, i) =>
+      i === index ? { ...indicator, [field]: value } : indicator
+    );
+    setIndicators(updatedIndicators);
+  };
+
+  const removeIndicator = (index: number) => {
+    setIndicators(indicators.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,7 +109,7 @@ export default function CreateProject() {
       return;
     }
 
-    const validationError = validateForm(formData);
+    const validationError = validateForm(formData, indicators);
     if (validationError) {
       setError(validationError);
       setLoading(false);
@@ -78,19 +117,40 @@ export default function CreateProject() {
     }
 
     try {
+      // Insert project
       const projectData: ProjectFormData = {
         ...formData,
         created_by: user.id,
         status: formData.status || 'Planning',
       };
 
-      const { error: supabaseError } = await supabase
+      const { data: projectResult, error: projectError } = await supabase
         .from('projects')
-        .insert([projectData]);
+        .insert([projectData])
+        .select()
+        .single();
 
-      if (supabaseError) {
-        console.error('Supabase error:', supabaseError);
-        throw new Error(supabaseError.message);
+      if (projectError) {
+        console.error('Supabase project error:', projectError);
+        throw new Error(projectError.message);
+      }
+
+      // Insert indicators
+      const indicatorData = indicators.map(indicator => ({
+        project_id: projectResult.id,
+        name: indicator.name,
+        value: indicator.value,
+        unit: indicator.unit,
+        category: indicator.category,
+      }));
+
+      const { error: indicatorError } = await supabase
+        .from('project_indicators')
+        .insert(indicatorData);
+
+      if (indicatorError) {
+        console.error('Supabase indicator error:', indicatorError);
+        throw new Error(indicatorError.message);
       }
 
       setSuccess(true);
@@ -116,7 +176,7 @@ export default function CreateProject() {
       )}
 
       {success && (
-        <div className="mb-4 p-4 bg-success-50 text-success-700 rounded-lg flex items-center gap-2">
+        <div className="mb-4 p-4 bg-green-50 text-green-700 rounded-lg flex items-center gap-2">
           <CheckCircle2 className="w-5 h-5" />
           <span>Project created successfully!</span>
         </div>
@@ -240,6 +300,76 @@ export default function CreateProject() {
             value={formData.description || ''}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
           />
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <label className="block text-sm font-medium text-gray-700">CSR Indicators</label>
+            <button
+              type="button"
+              onClick={addIndicator}
+              className="flex items-center text-sm text-primary-600 hover:text-primary-700"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Add Indicator
+            </button>
+          </div>
+          {indicators.map((indicator, index) => (
+            <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Name</label>
+                <input
+                  type="text"
+                  value={indicator.name}
+                  onChange={(e) => updateIndicator(index, 'name', e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                  placeholder="e.g., Carbon Emissions Reduced"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Value</label>
+                <input
+                  type="number"
+                  value={indicator.value}
+                  onChange={(e) => updateIndicator(index, 'value', parseFloat(e.target.value) || 0)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Unit</label>
+                <input
+                  type="text"
+                  value={indicator.unit}
+                  onChange={(e) => updateIndicator(index, 'unit', e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                  placeholder="e.g., tons CO2e"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Category</label>
+                <select
+                  value={indicator.category}
+                  onChange={(e) => updateIndicator(index, 'category', e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                >
+                  <option value="Environmental">Environmental</option>
+                  <option value="Social">Social</option>
+                  <option value="Governance">Governance</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => removeIndicator(index)}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="flex justify-end gap-4">

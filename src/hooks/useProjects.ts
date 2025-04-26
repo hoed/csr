@@ -1,8 +1,17 @@
-// src/hooks/useProjects.ts
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
-// Define Project interface to match database schema
+export interface ProjectIndicator {
+  id: string;
+  project_id: string;
+  name: string;
+  value: number;
+  unit: string;
+  category: 'Environmental' | 'Social' | 'Governance';
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -19,6 +28,7 @@ export interface Project {
   created_at: string;
   updated_at: string;
   created_by: string;
+  indicators: ProjectIndicator[];
 }
 
 export function useProjects() {
@@ -33,7 +43,19 @@ export function useProjects() {
 
       const { data, error } = await supabase
         .from('projects')
-        .select('*')
+        .select(`
+          *,
+          project_indicators (
+            id,
+            project_id,
+            name,
+            value,
+            unit,
+            category,
+            created_at,
+            updated_at
+          )
+        `)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -41,7 +63,13 @@ export function useProjects() {
         throw new Error(error.message);
       }
 
-      setProjects(data || []);
+      // Rename project_indicators to indicators for consistency
+      const formattedData = data?.map(project => ({
+        ...project,
+        indicators: project.project_indicators || [],
+      })) || [];
+
+      setProjects(formattedData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch projects');
       console.error('Error fetching projects:', err);
@@ -53,8 +81,8 @@ export function useProjects() {
   useEffect(() => {
     fetchProjects();
 
-    // Subscribe to real-time inserts
-    const subscription = supabase
+    // Subscribe to real-time inserts on projects
+    const projectSubscription = supabase
       .channel('projects')
       .on(
         'postgres_changes',
@@ -69,8 +97,25 @@ export function useProjects() {
       )
       .subscribe();
 
+    // Subscribe to real-time inserts on project_indicators
+    const indicatorSubscription = supabase
+      .channel('project_indicators')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'project_indicators',
+        },
+        () => {
+          fetchProjects();
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(subscription);
+      supabase.removeChannel(projectSubscription);
+      supabase.removeChannel(indicatorSubscription);
     };
   }, []);
 
