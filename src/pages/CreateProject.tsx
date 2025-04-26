@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { AlertCircle, CheckCircle2, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
-// Define ProjectFormData
+// Define ProjectFormData interface
 interface ProjectFormData {
   name: string;
   description: string | null;
@@ -19,7 +19,7 @@ interface ProjectFormData {
   created_by?: string | null;
 }
 
-// Define IndicatorFormData
+// Define IndicatorFormData interface
 interface IndicatorFormData {
   name: string;
   value: number;
@@ -43,6 +43,7 @@ export default function CreateProject() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [expandedIndicator, setExpandedIndicator] = useState<number | null>(null);
 
   const initialFormData: ProjectFormData = {
     name: '',
@@ -84,6 +85,7 @@ export default function CreateProject() {
 
   const addIndicator = () => {
     setIndicators([...indicators, { name: '', value: 0, unit: '', category: 'Environmental' }]);
+    setExpandedIndicator(indicators.length);
   };
 
   const updateIndicator = (index: number, field: keyof IndicatorFormData, value: any) => {
@@ -95,6 +97,11 @@ export default function CreateProject() {
 
   const removeIndicator = (index: number) => {
     setIndicators(indicators.filter((_, i) => i !== index));
+    if (expandedIndicator === index) setExpandedIndicator(null);
+  };
+
+  const toggleIndicator = (index: number) => {
+    setExpandedIndicator(expandedIndicator === index ? null : index);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -117,7 +124,6 @@ export default function CreateProject() {
     }
 
     try {
-      // Insert project
       const projectData: ProjectFormData = {
         ...formData,
         created_by: user.id,
@@ -135,7 +141,6 @@ export default function CreateProject() {
         throw new Error(projectError.message);
       }
 
-      // Insert indicators
       const indicatorData = indicators.map(indicator => ({
         project_id: projectResult.id,
         name: indicator.name,
@@ -165,230 +170,313 @@ export default function CreateProject() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Create New Project</h1>
+    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto">
+        <h1 className="text-3xl font-bold text-gray-900 mb-6 text-center sm:text-left">Create New Project</h1>
 
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-          <AlertCircle className="w-5 h-5" />
-          <span>{error}</span>
-        </div>
-      )}
+        <div className="bg-white shadow-lg rounded-lg p-6 sm:p-8">
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 animate-slide-in">
+              <AlertCircle className="w-5 h-5" />
+              <span>{error}</span>
+            </div>
+          )}
 
-      {success && (
-        <div className="mb-4 p-4 bg-green-50 text-green-700 rounded-lg flex items-center gap-2">
-          <CheckCircle2 className="w-5 h-5" />
-          <span>Project created successfully!</span>
-        </div>
-      )}
+          {success && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700 animate-slide-in">
+              <CheckCircle2 className="w-5 h-5" />
+              <span>Project created successfully!</span>
+            </div>
+          )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700">Project Name</label>
-            <input
-              type="text"
-              id="name"
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-8">
+            {/* Project Details */}
+            <div>
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Project Details</h2>
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <div>
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">Project Name</label>
+                  <input
+                    type="text"
+                    id="name"
+                    required
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    aria-required="true"
+                  />
+                </div>
 
-          <div>
-            <label htmlFor="category" className="block text-sm font-medium text-gray-700">Category</label>
-            <select
-              id="category"
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value as ProjectFormData['category'] })}
-            >
-              <option value="Environmental">Environmental</option>
-              <option value="Social">Social</option>
-              <option value="Governance">Governance</option>
-            </select>
-          </div>
+                <div>
+                  <label htmlFor="category" className="block text-sm font-medium text-gray-700">Category</label>
+                  <select
+                    id="category"
+                    required
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value as ProjectFormData['category'] })}
+                    aria-required="true"
+                  >
+                    <option value="Environmental">Environmental</option>
+                    <option value="Social">Social</option>
+                    <option value="Governance">Governance</option>
+                  </select>
+                </div>
 
-          <div>
-            <label htmlFor="location" className="block text-sm font-medium text-gray-700">Location</label>
-            <input
-              type="text"
-              id="location"
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-              value={formData.location}
-              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-            />
-          </div>
+                <div>
+                  <label htmlFor="location" className="block text-sm font-medium text-gray-700">Location</label>
+                  <input
+                    type="text"
+                    id="location"
+                    required
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                    value={formData.location}
+                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                    aria-required="true"
+                  />
+                </div>
 
-          <div>
-            <label htmlFor="manager" className="block text-sm font-medium text-gray-700">Project Manager</label>
-            <input
-              type="text"
-              id="manager"
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-              value={formData.manager}
-              onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
-            />
-          </div>
+                <div>
+                  <label htmlFor="manager" className="block text-sm font-medium text-gray-700">Project Manager</label>
+                  <input
+                    type="text"
+                    id="manager"
+                    required
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                    value={formData.manager}
+                    onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
+                    aria-required="true"
+                  />
+                </div>
 
-          <div>
-            <label htmlFor="start_date" className="block text-sm font-medium text-gray-700">Start Date</label>
-            <input
-              type="date"
-              id="start_date"
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-              value={formData.start_date}
-              onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-            />
-          </div>
+                <div>
+                  <label htmlFor="start_date" className="block text-sm font-medium text-gray-700">Start Date</label>
+                  <input
+                    type="date"
+                    id="start_date"
+                    required
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                    value={formData.start_date}
+                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                    aria-required="true"
+                  />
+                </div>
 
-          <div>
-            <label htmlFor="end_date" className="block text-sm font-medium text-gray-700">End Date</label>
-            <input
-              type="date"
-              id="end_date"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-              value={formData.end_date || ''}
-              onChange={(e) => setFormData({ ...formData, end_date: e.target.value || null })}
-            />
-          </div>
+                <div>
+                  <label htmlFor="end_date" className="block text-sm font-medium text-gray-700">End Date (Optional)</label>
+                  <input
+                    type="date"
+                    id="end_date"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                    value={formData.end_date || ''}
+                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value || null })}
+                  />
+                </div>
 
-          <div>
-            <label htmlFor="budget" className="block text-sm font-medium text-gray-700">Budget</label>
-            <input
-              type="number"
-              id="budget"
-              required
-              min="0"
-              step="0.01"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-              value={formData.budget}
-              onChange={(e) => setFormData({ ...formData, budget: parseFloat(e.target.value) || 0 })}
-            />
-          </div>
+                <div>
+                  <label htmlFor="budget" className="block text-sm font-medium text-gray-700">Budget</label>
+                  <input
+                    type="number"
+                    id="budget"
+                    required
+                    min="0"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                    value={formData.budget}
+                    onChange={(e) => setFormData({ ...formData, budget: Number(e.target.value) })}
+                    aria-required="true"
+                  />
+                </div>
 
-          <div>
-            <label htmlFor="sdgs" className="block text-sm font-medium text-gray-700">SDGs</label>
-            <select
-              multiple
-              id="sdgs"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-              value={formData.sdgs.map(String)}
-              onChange={(e) => {
-                const sdgs = Array.from(e.target.selectedOptions, option => parseInt(option.value));
-                setFormData({ ...formData, sdgs });
-              }}
-            >
-              {Array.from({ length: 17 }, (_, i) => i + 1).map(sdg => (
-                <option key={sdg} value={sdg}>SDG {sdg}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+                <div>
+                  <label htmlFor="sdgs" className="block text-sm font-medium text-gray-700">SDGs (comma-separated, 1-17)</label>
+                  <input
+                    type="text"
+                    id="sdgs"
+                    placeholder="e.g., 1,3,7"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                    value={formData.sdgs.join(',')}
+                    onChange={(e) => {
+                      const sdgs = e.target.value
+                        .split(',')
+                        .map(s => Number(s.trim()))
+                        .filter(s => !isNaN(s));
+                      setFormData({ ...formData, sdgs });
+                    }}
+                  />
+                </div>
 
-        <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-700">Description</label>
-          <textarea
-            id="description"
-            rows={4}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-            value={formData.description || ''}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-          />
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <label className="block text-sm font-medium text-gray-700">CSR Indicators</label>
-            <button
-              type="button"
-              onClick={addIndicator}
-              className="flex items-center text-sm text-primary-600 hover:text-primary-700"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Add Indicator
-            </button>
-          </div>
-          {indicators.map((indicator, index) => (
-            <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Name</label>
-                <input
-                  type="text"
-                  value={indicator.name}
-                  onChange={(e) => updateIndicator(index, 'name', e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                  placeholder="e.g., Carbon Emissions Reduced"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Value</label>
-                <input
-                  type="number"
-                  value={indicator.value}
-                  onChange={(e) => updateIndicator(index, 'value', parseFloat(e.target.value) || 0)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                  min="0"
-                  step="0.01"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Unit</label>
-                <input
-                  type="text"
-                  value={indicator.unit}
-                  onChange={(e) => updateIndicator(index, 'unit', e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                  placeholder="e.g., tons CO2e"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Category</label>
-                <select
-                  value={indicator.category}
-                  onChange={(e) => updateIndicator(index, 'category', e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                >
-                  <option value="Environmental">Environmental</option>
-                  <option value="Social">Social</option>
-                  <option value="Governance">Governance</option>
-                </select>
-              </div>
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  onClick={() => removeIndicator(index)}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <label htmlFor="description" className="block text-sm font-medium text-gray-700">Description</label>
+                  <textarea
+                    id="description"
+                    rows={4}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                    value={formData.description || ''}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value || null })}
+                  />
+                </div>
               </div>
             </div>
-          ))}
-        </div>
 
-        <div className="flex justify-end gap-4">
-          <button
-            type="button"
-            onClick={() => navigate('/projects')}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Creating...' : 'Create Project'}
-          </button>
+            {/* Indicators */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-800">CSR Indicators</h2>
+                <button
+                  type="button"
+                  onClick={addIndicator}
+                  className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition duration-150 ease-in-out"
+                >
+                  <Plus className="w-5 h-5" />
+                  Add Indicator
+                </button>
+              </div>
+
+              {indicators.length === 0 ? (
+                <p className="text-gray-500">No indicators added. Click "Add Indicator" to start.</p>
+              ) : (
+                indicators.map((indicator, index) => (
+                  <div
+                    key={index}
+                    className="border border-gray-200 rounded-lg mb-4 overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleIndicator(index)}
+                      className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition duration-150 ease-in-out"
+                    >
+                      <span className="font-medium text-gray-800">
+                        {indicator.name || `Indicator ${index + 1}`}
+                      </span>
+                      <div className="flex items-center gap-4">
+                        <span className="text-sm text-gray-600">
+                          {indicator.value} {indicator.unit}
+                        </span>
+                        {expandedIndicator === index ? (
+                          <ChevronUp className="w-5 h-5 text-gray-600" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5 text-gray-600" />
+                        )}
+                      </div>
+                    </button>
+
+                    {expandedIndicator === index && (
+                      <div className="p-4 bg-white">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <div>
+                            <label htmlFor={`indicator-name-${index}`} className="block text-sm font-medium text-gray-700">
+                              Name
+                            </label>
+                            <input
+                              type="text"
+                              id={`indicator-name-${index}`}
+                              required
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                              value={indicator.name}
+                              onChange={(e) => updateIndicator(index, 'name', e.target.value)}
+                              aria-required="true"
+                            />
+                          </div>
+
+                          <div>
+                            <label htmlFor={`indicator-value-${index}`} className="block text-sm font-medium text-gray-700">
+                              Value
+                            </label>
+                            <input
+                              type="number"
+                              id={`indicator-value-${index}`}
+                              required
+                              min="0"
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                              value={indicator.value}
+                              onChange={(e) => updateIndicator(index, 'value', Number(e.target.value))}
+                              aria-required="true"
+                            />
+                          </div>
+
+                          <div>
+                            <label htmlFor={`indicator-unit-${index}`} className="block text-sm font-medium text-gray-700">
+                              Unit
+                            </label>
+                            <input
+                              type="text"
+                              id={`indicator-unit-${index}`}
+                              required
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                              value={indicator.unit}
+                              onChange={(e) => updateIndicator(index, 'unit', e.target.value)}
+                              aria-required="true"
+                            />
+                          </div>
+
+                          <div>
+                            <label htmlFor={`indicator-category-${index}`} className="block text-sm font-medium text-gray-700">
+                              Category
+                            </label>
+                            <select
+                              id={`indicator-category-${index}`}
+                              required
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 transition duration-150 ease-in-out"
+                              value={indicator.category}
+                              onChange={(e) => updateIndicator(index, 'category', e.target.value as IndicatorFormData['category'])}
+                              aria-required="true"
+                            >
+                              <option value="Environmental">Environmental</option>
+                              <option value="Social">Social</option>
+                              <option value="Governance">Governance</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => removeIndicator(index)}
+                          className="mt-4 flex items-center gap-2 text-red-600 hover:text-red-800 transition duration-150 ease-in-out"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                          Remove Indicator
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Submit Button */}
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={loading}
+                className={`px-6 py-2 rounded-md text-white transition duration-150 ease-in-out ${
+                  loading
+                    ? 'bg-primary-400 cursor-not-allowed'
+                    : 'bg-primary-600 hover:bg-primary-700'
+                }`}
+              >
+                {loading ? 'Creating...' : 'Create Project'}
+              </button>
+            </div>
+          </form>
         </div>
-      </form>
+      </div>
+
+      {/* Tailwind Animation for Slide-In */}
+      <style>{`
+        @keyframes slide-in {
+          from {
+            transform: translateY(-10px);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+        .animate-slide-in {
+          animation: slide-in 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
