@@ -147,7 +147,7 @@ export default function ProjectReportsTable({ reports }: { reports: any[] }) {
 
 ### Frontend
 ```bash
-cd frontend
+cd csr
 npm install
 npm run build
 npm run dev
