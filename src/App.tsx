@@ -19,6 +19,7 @@ import Manual from './pages/Manual';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import NotFound from './pages/NotFound';
+import { Analytics } from "@vercel/analytics/react"
 
 // Route protection component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
