@@ -149,7 +149,7 @@ const Login = () => {
       </div>
       
       <footer className="absolute bottom-0 w-full py-4 text-center text-sm text-white bg-black/30">
-        <p>&copy; {new Date().getFullYear()} Your Company. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} Hoed Projects. All rights reserved.</p>
         <div className="mt-2">
           <Link to="/terms" className="text-white hover:text-gray-200 mx-2">Terms</Link>
           <Link to="/privacy" className="text-white hover:text-gray-200 mx-2">Privacy</Link>
