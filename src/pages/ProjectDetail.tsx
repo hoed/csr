@@ -40,31 +40,38 @@ export default function ProjectDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Currency formatter for IDR
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+    }).format(value);
+
   useEffect(() => {
     if (!user) {
-      setError('You must be logged in to view project details');
+      setError('Anda harus login untuk melihat detail proyek');
       setLoading(false);
       return;
     }
 
     if (!id) {
-      setError('Project ID is missing');
+      setError('ID proyek tidak ditemukan');
       setLoading(false);
       return;
     }
 
-    console.log('Fetching project with ID:', id); // Debug: Log project ID
+    console.log('Mengambil proyek dengan ID:', id); // Debug
 
     const fetchProjectDetails = async () => {
       try {
-        // Set a timeout to prevent infinite loading
         const timeout = setTimeout(() => {
-          setError('Request timed out. Please try again.');
+          setError('Permintaan timeout. Silakan coba lagi.');
           setLoading(false);
         }, 10000); // 10 seconds
 
         // Fetch project
-        console.log('Querying projects table...');
+        console.log('Mengkueri tabel projects...');
         const { data: projectData, error: projectError } = await supabase
           .from('projects')
           .select('*')
@@ -72,18 +79,18 @@ export default function ProjectDetails() {
           .single();
 
         if (projectError) {
-          console.error('Project query error:', projectError);
-          throw new Error(`Failed to fetch project: ${projectError.message}`);
+          console.error('Kesalahan kueri proyek:', projectError);
+          throw new Error(`Gagal mengambil proyek: ${projectError.message}`);
         }
 
         if (!projectData) {
-          throw new Error('Project not found');
+          throw new Error('Proyek tidak ditemukan');
         }
 
-        console.log('Project data:', projectData); // Debug: Log project data
+        console.log('Data proyek:', projectData); // Debug
 
         // Fetch indicators
-        console.log('Querying project_indicators table...');
+        console.log('Mengkueri tabel project_indicators...');
         const { data: indicatorData, error: indicatorError } = await supabase
           .from('project_indicators')
           .select('*')
@@ -91,19 +98,19 @@ export default function ProjectDetails() {
           .order('created_at', { ascending: false });
 
         if (indicatorError) {
-          console.error('Indicators query error:', indicatorError);
-          throw new Error(`Failed to fetch indicators: ${indicatorError.message}`);
+          console.error('Kesalahan kueri indikator:', indicatorError);
+          throw new Error(`Gagal mengambil indikator: ${indicatorError.message}`);
         }
 
-        console.log('Indicators data:', indicatorData); // Debug: Log indicators
+        console.log('Data indikator:', indicatorData); // Debug
 
         setProject(projectData);
         setIndicators(indicatorData || []);
         clearTimeout(timeout);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+        const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan tak terduga';
         setError(errorMessage);
-        console.error('Error:', err);
+        console.error('Kesalahan:', err);
       } finally {
         setLoading(false);
       }
@@ -134,7 +141,7 @@ export default function ProjectDetails() {
               className="mt-4 flex items-center gap-2 text-primary-600 hover:text-primary-800"
             >
               <ArrowLeft className="w-5 h-5" />
-              Back to Projects
+              Kembali ke Proyek
             </button>
           </div>
         </div>
@@ -147,13 +154,13 @@ export default function ProjectDetails() {
       <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-5xl mx-auto">
           <div className="bg-white shadow-lg rounded-lg p-6">
-            <p className="text-gray-500">Project not found.</p>
+            <p className="text-gray-500">Proyek tidak ditemukan.</p>
             <button
               onClick={() => navigate('/projects')}
               className="mt-4 flex items-center gap-2 text-primary-600 hover:text-primary-800"
             >
               <ArrowLeft className="w-5 h-5" />
-              Back to Projects
+              Kembali ke Proyek
             </button>
           </div>
         </div>
@@ -169,7 +176,7 @@ export default function ProjectDetails() {
           className="mb-6 flex items-center gap-2 text-primary-600 hover:text-primary-800"
         >
           <ArrowLeft className="w-5 h-5" />
-          Back to Projects
+          Kembali ke Proyek
         </button>
 
         <div className="bg-white shadow-lg rounded-lg p-6 sm:p-8">
@@ -177,73 +184,73 @@ export default function ProjectDetails() {
 
           {/* Project Details */}
           <div className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Project Details</h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">Detail Proyek</h2>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               <div>
-                <p className="text-sm font-medium text-gray-700">Category</p>
+                <p className="text-sm font-medium text-gray-700">Kategori</p>
                 <p className="text-gray-900">{project.category}</p>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-700">Location</p>
+                <p className="text-sm font-medium text-gray-700">Lokasi</p>
                 <p className="text-gray-900">{project.location}</p>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-700">Manager</p>
+                <p className="text-sm font-medium text-gray-700">Manajer</p>
                 <p className="text-gray-900">{project.manager}</p>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-700">Start Date</p>
+                <p className="text-sm font-medium text-gray-700">Tanggal Mulai</p>
                 <p className="text-gray-900">{new Date(project.start_date).toLocaleDateString()}</p>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-700">End Date</p>
+                <p className="text-sm font-medium text-gray-700">Tanggal Selesai</p>
                 <p className="text-gray-900">
                   {project.end_date ? new Date(project.end_date).toLocaleDateString() : 'N/A'}
                 </p>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-700">Budget</p>
-                <p className="text-gray-900">{project.budget.toLocaleString()} IDR</p>
+                <p className="text-sm font-medium text-gray-700">Anggaran</p>
+                <p className="text-gray-900">{formatCurrency(project.budget)}</p>
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-700">SDGs</p>
-                <p className="text-gray-900">{project.sdgs?.join(', ') || 'None'}</p>
+                <p className="text-gray-900">{project.sdgs?.join(', ') || 'Tidak ada'}</p>
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-700">Status</p>
                 <p className="text-gray-900">{project.status}</p>
               </div>
               <div className="sm:col-span-2 lg:col-span-3">
-                <p className="text-sm font-medium text-gray-700">Description</p>
-                <p className="text-gray-900">{project.description || 'No description provided'}</p>
+                <p className="text-sm font-medium text-gray-700">Deskripsi</p>
+                <p className="text-gray-900">{project.description || 'Tidak ada deskripsi'}</p>
               </div>
             </div>
           </div>
 
           {/* Indicators */}
           <div>
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">CSR Indicators</h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">Indikator CSR</h2>
             {indicators.length === 0 ? (
-              <p className="text-gray-500">No indicators associated with this project.</p>
+              <p className="text-gray-500">Tidak ada indikator terkait proyek ini.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Name
+                        Nama
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Value
+                        Nilai
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Unit
+                        Satuan
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Category
+                        Kategori
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Created At
+                        Dibuat Pada
                       </th>
                     </tr>
                   </thead>
@@ -253,7 +260,9 @@ export default function ProjectDetails() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {indicator.name}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{indicator.value}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {indicator.unit === 'IDR' ? formatCurrency(indicator.value) : indicator.value}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{indicator.unit}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{indicator.category}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
