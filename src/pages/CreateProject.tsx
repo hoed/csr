@@ -1,27 +1,31 @@
-import React, { useState } from 'react';
+// src/pages/CreateProject.tsx
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../hooks/useAuth'; // Import useAuth
-import { AlertCircle } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
+// Define ProjectFormData to match database schema
 interface ProjectFormData {
   name: string;
-  description: string;
+  description: string | null;
   location: string;
   category: 'Environmental' | 'Social' | 'Governance';
   start_date: string;
-  end_date: string;
+  end_date: string | null;
   budget: number;
   manager: string;
   sdgs: number[];
-  status?: 'Planning' | 'Active' | 'Completed' | 'Cancelled'; // Add status
+  status?: 'Planning' | 'Active' | 'Completed' | 'Cancelled';
+  created_by?: string | null;
 }
 
 export default function CreateProject() {
   const navigate = useNavigate();
-  const { user } = useAuth(); // Get authenticated user
+  const { user } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   const initialFormData: ProjectFormData = {
     name: '',
@@ -29,11 +33,12 @@ export default function CreateProject() {
     location: '',
     category: 'Environmental',
     start_date: '',
-    end_date: '',
+    end_date: null,
     budget: 0,
     manager: '',
     sdgs: [],
-    status: 'Planning', // Default status
+    status: 'Planning',
+    created_by: user?.id || null,
   };
 
   const [formData, setFormData] = useState<ProjectFormData>(initialFormData);
@@ -57,8 +62,14 @@ export default function CreateProject() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setSuccess(false);
 
-    // Validate form data
+    if (!user) {
+      setError('You must be logged in to create a project');
+      setLoading(false);
+      return;
+    }
+
     const validationError = validateForm(formData);
     if (validationError) {
       setError(validationError);
@@ -66,18 +77,11 @@ export default function CreateProject() {
       return;
     }
 
-    // Ensure user is authenticated
-    if (!user) {
-      setError('You must be logged in to create a project');
-      setLoading(false);
-      return;
-    }
-
     try {
-      const projectData = {
+      const projectData: ProjectFormData = {
         ...formData,
-        created_by: user.id, // Add user ID
-        status: formData.status || 'Planning', // Ensure status is set
+        created_by: user.id,
+        status: formData.status || 'Planning',
       };
 
       const { error: supabaseError } = await supabase
@@ -85,14 +89,15 @@ export default function CreateProject() {
         .insert([projectData]);
 
       if (supabaseError) {
-        console.error('Supabase error:', supabaseError); // Log detailed error
+        console.error('Supabase error:', supabaseError);
         throw new Error(supabaseError.message);
       }
 
-      navigate('/projects');
+      setSuccess(true);
+      setTimeout(() => navigate('/projects'), 2000);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred while creating the project';
-      console.error('Error details:', err); // Log full error for debugging
+      console.error('Error details:', err);
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -107,6 +112,13 @@ export default function CreateProject() {
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
           <AlertCircle className="w-5 h-5" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {success && (
+        <div className="mb-4 p-4 bg-success-50 text-success-700 rounded-lg flex items-center gap-2">
+          <CheckCircle2 className="w-5 h-5" />
+          <span>Project created successfully!</span>
         </div>
       )}
 
@@ -181,8 +193,8 @@ export default function CreateProject() {
               type="date"
               id="end_date"
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-              value={formData.end_date}
-              onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+              value={formData.end_date || ''}
+              onChange={(e) => setFormData({ ...formData, end_date: e.target.value || null })}
             />
           </div>
 
@@ -201,21 +213,21 @@ export default function CreateProject() {
           </div>
 
           <div>
-            <label htmlFor="sdgs" className="block text-sm font-medium text-gray-700">SDGs (comma-separated, 1-17)</label>
-            <input
-              type="text"
+            <label htmlFor="sdgs" className="block text-sm font-medium text-gray-700">SDGs</label>
+            <select
+              multiple
               id="sdgs"
-              placeholder="e.g., 1,3,5"
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-              value={formData.sdgs.join(',')}
+              value={formData.sdgs.map(String)}
               onChange={(e) => {
-                const sdgs = e.target.value
-                  .split(',')
-                  .map(s => parseInt(s.trim()))
-                  .filter(s => !isNaN(s) && s >= 1 && s <= 17);
+                const sdgs = Array.from(e.target.selectedOptions, option => parseInt(option.value));
                 setFormData({ ...formData, sdgs });
               }}
-            />
+            >
+              {Array.from({ length: 17 }, (_, i) => i + 1).map(sdg => (
+                <option key={sdg} value={sdg}>SDG {sdg}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -225,7 +237,7 @@ export default function CreateProject() {
             id="description"
             rows={4}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-            value={formData.description}
+            value={formData.description || ''}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
           />
         </div>

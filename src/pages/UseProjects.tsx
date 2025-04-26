@@ -2,8 +2,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
-// Define Project interface to match database schema
-export interface Project {
+// Define Project type (fallback if Supabase types are not generated)
+interface Project {
   id: string;
   name: string;
   description: string | null;
@@ -21,16 +21,15 @@ export interface Project {
   created_by: string;
 }
 
-export function useProjects() {
+export const useProjects = () => {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchProjects = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
-
       const { data, error } = await supabase
         .from('projects')
         .select('*')
@@ -44,7 +43,6 @@ export function useProjects() {
       setProjects(data || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch projects');
-      console.error('Error fetching projects:', err);
     } finally {
       setLoading(false);
     }
@@ -74,10 +72,5 @@ export function useProjects() {
     };
   }, []);
 
-  return {
-    projects,
-    loading,
-    error,
-    refetch: fetchProjects,
-  };
-}
+  return { projects, loading, error, refetch: fetchProjects };
+};

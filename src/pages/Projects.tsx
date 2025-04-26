@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+// src/pages/Projects.tsx
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FolderPlus, Search, Filter, ArrowDownUp } from 'lucide-react';
+import { FolderPlus, Search, Filter, ArrowDownUp, AlertCircle } from 'lucide-react';
 import ProjectCard from '../components/projects/ProjectCard';
 import { useProjects } from '../hooks/useProjects';
 
 const Projects = () => {
-  const { projects, loading } = useProjects();
+  const { projects, loading, error, refetch } = useProjects();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -15,7 +16,7 @@ const Projects = () => {
     .filter(project => 
       (searchTerm === '' || 
         project.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        project.description.toLowerCase().includes(searchTerm.toLowerCase())
+        (project.description || '').toLowerCase().includes(searchTerm.toLowerCase())
       ) &&
       (categoryFilter === '' || project.category === categoryFilter) &&
       (statusFilter === '' || project.status === statusFilter)
@@ -46,6 +47,19 @@ const Projects = () => {
           New Project
         </Link>
       </div>
+
+      {error && (
+        <div className="mb-4 p-4 bg-error-50 text-error-700 rounded-lg flex items-center gap-2">
+          <AlertCircle className="w-5 h-5" />
+          <span>{error}</span>
+          <button
+            onClick={refetch}
+            className="ml-4 text-sm text-primary-600 hover:text-primary-700"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mb-6">
