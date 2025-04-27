@@ -1,476 +1,304 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../hooks/useAuth';
-import { AlertCircle, CheckCircle2, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Tables, Enums } from '../types/supabase';
 
-// Define interfaces
-interface ProjectFormData {
-  name: string;
-  description: string | null;
-  location: string;
-  category: 'Environmental' | 'Social' | 'Governance';
-  start_date: string;
-  end_date: string | null;
-  budget: number;
-  manager: string;
-  sdgs: number[];
-  status?: 'Planning' | 'Active' | 'Completed' | 'Cancelled';
-  created_by?: string | null;
-}
+// Define type aliases for clarity
+type Project = Tables<"projects">;
+type ProjectIndicator = Tables<"project_indicators">;
+type ProjectCategory = Enums<"project_category">;
+type ProjectStatus = Enums<"project_status">;
 
-interface IndicatorFormData {
-  name: string;
-  value: number;
-  unit: string;
-  category: 'Environmental' | 'Social' | 'Governance';
-}
-
-export default function CreateProject() {
+const CreateProject = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [expandedIndicator, setExpandedIndicator] = useState<number | null>(null);
-  const [projects, setProjects] = useState<ProjectFormData[]>([]);
-
-  const initialFormData: ProjectFormData = {
+  const [newProject, setNewProject] = useState<Partial<Project>>({
     name: '',
     description: '',
     location: '',
-    category: 'Environmental',
+    category: undefined, // Changed from '' to undefined
+    status: undefined,  // Changed from '' to undefined
     start_date: '',
     end_date: null,
     budget: 0,
     manager: '',
     sdgs: [],
-    status: 'Planning',
-    created_by: user?.id || null,
-  };
+    image_url: null,
+  });
+  const [newIndicators, setNewIndicators] = useState<Partial<ProjectIndicator>[]>([]);
 
-  const [formData, setFormData] = useState<ProjectFormData>(initialFormData);
-  const [indicators, setIndicators] = useState<IndicatorFormData[]>([
-    { name: 'Carbon Emissions Reduced', value: 0, unit: 'tons CO2e', category: 'Environmental' },
-    { name: 'Jobs Created', value: 0, unit: 'jobs', category: 'Social' },
-    { name: 'Compliance Rate', value: 0, unit: '%', category: 'Governance' },
-  ]);
+  // Handle creating a new project
+  const handleCreate = async () => {
+    const { data: authData, error: authError } = await supabase.auth.getSession();
+    if (authError || !authData.session) {
+      console.error('Error getting auth session:', authError);
+      alert('You must be logged in to create a project');
+      return;
+    }
 
-  // Real-time subscription for projects
-  useEffect(() => {
-    const subscription = supabase
-      .channel('projects')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'projects' }, (payload) => {
-        setProjects((prev) => [...prev, payload.new as ProjectFormData]);
+    const createdBy = authData.session.user.id;
+    const now = new Date().toISOString();
+
+    const { data: projectData, error: projectError } = await supabase
+      .from('projects')
+      .insert({
+        ...newProject,
+        created_by: createdBy,
+        created_at: now,
+        updated_at: now,
       })
-      .subscribe();
+      .select()
+      .single();
 
-    return () => {
-      supabase.removeChannel(subscription);
-    };
-  }, []);
-
-  const validateForm = (data: ProjectFormData, indicators: IndicatorFormData[]) => {
-    if (!data.name) return 'Project name is required';
-    if (!data.location) return 'Location is required';
-    if (!data.start_date) return 'Start date is required';
-    if (!data.manager) return 'Project manager is required';
-    if (data.budget < 0) return 'Budget cannot be negative';
-    if (data.end_date && new Date(data.end_date) < new Date(data.start_date)) {
-      return 'End date cannot be before start date';
-    }
-    if (data.sdgs.some(sdg => sdg < 1 || sdg > 17)) {
-      return 'SDGs must be between 1 and 17';
-    }
-    if (indicators.length === 0) return 'At least one indicator is required';
-    const indicatorNames = indicators.map(ind => ind.name.toLowerCase());
-    if (new Set(indicatorNames).size !== indicatorNames.length) {
-      return 'Indicator names must be unique';
-    }
-    for (const [index, indicator] of indicators.entries()) {
-      if (!indicator.name) return `Indicator ${index + 1}: Name is required`;
-      if (indicator.value < 0) return `Indicator ${index + 1}: Value cannot be negative`;
-      if (!indicator.unit) return `Indicator ${index + 1}: Unit is required`;
-    }
-    return null;
-  };
-
-  const addIndicator = () => {
-    setIndicators([...indicators, { name: '', value: 0, unit: '', category: 'Environmental' }]);
-    setExpandedIndicator(indicators.length);
-  };
-
-  const updateIndicator = (index: number, field: keyof IndicatorFormData, value: any) => {
-    const updatedIndicators = indicators.map((indicator, i) =>
-      i === index ? { ...indicator, [field]: value } : indicator
-    );
-    setIndicators(updatedIndicators);
-  };
-
-  const removeIndicator = (index: number) => {
-    setIndicators(indicators.filter((_, i) => i !== index));
-    if (expandedIndicator === index) setExpandedIndicator(null);
-  };
-
-  const toggleIndicator = (index: number) => {
-    setExpandedIndicator(expandedIndicator === index ? null : index);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSuccess(false);
-
-    if (!user) {
-      setError('You must be logged in to create a project');
-      setLoading(false);
+    if (projectError) {
+      console.error('Error creating project:', projectError);
+      alert('Failed to create project');
       return;
     }
 
-    const validationError = validateForm(formData, indicators);
-    if (validationError) {
-      setError(validationError);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const projectData: ProjectFormData = {
-        ...formData,
-        created_by: user.id,
-        status: formData.status || 'Planning',
-      };
-
-      const { data: projectResult, error: projectError } = await supabase
-        .from('projects')
-        .insert([projectData])
-        .select()
-        .single();
-
-      if (projectError) throw new Error(`Failed to create project: ${projectError.message}`);
-
-      const indicatorData = indicators.map(indicator => ({
-        project_id: projectResult.id,
+    // Insert new indicators
+    if (newIndicators.length > 0) {
+      const indicatorsToInsert = newIndicators.map((indicator) => ({
+        project_id: projectData.id,
         name: indicator.name,
-        value: indicator.value,
+        value: indicator.value ?? 0,
         unit: indicator.unit,
         category: indicator.category,
+        created_at: now,
+        updated_at: now,
       }));
 
       const { error: indicatorError } = await supabase
         .from('project_indicators')
-        .insert(indicatorData);
+        .insert(indicatorsToInsert);
 
-      if (indicatorError) throw new Error(`Failed to create indicators: ${indicatorError.message}`);
-
-      setSuccess(true);
-      setTimeout(() => navigate('/projects'), 2000);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
-      setError(errorMessage);
-      console.error('Error:', err);
-    } finally {
-      setLoading(false);
+      if (indicatorError) {
+        console.error('Error creating project indicators:', indicatorError);
+        alert('Project created, but failed to create indicators');
+        return;
+      }
     }
+
+    alert('Project created successfully');
+    navigate('/projects');
+  };
+
+  // Add a new indicator field
+  const addNewIndicator = () => {
+    setNewIndicators([...newIndicators, { name: '', value: 0, unit: '', category: '' }]);
+  };
+
+  // Update a new indicator field
+  const updateNewIndicator = (index: number, field: keyof ProjectIndicator, value: any) => {
+    const updatedIndicators = [...newIndicators];
+    updatedIndicators[index] = { ...updatedIndicators[index], [field]: value };
+    setNewIndicators(updatedIndicators);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-6 text-center sm:text-left">Create New Project</h1>
+    <div className="p-6 max-w-2xl mx-auto">
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Create New Project</h1>
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+            <input
+              type="text"
+              value={newProject.name}
+              onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+            <textarea
+              value={newProject.description || ''}
+              onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Location</label>
+            <input
+              type="text"
+              value={newProject.location}
+              onChange={(e) => setNewProject({ ...newProject, location: e.target.value })}
+              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+            <select
+              value={newProject.category ?? ''} // Use ?? '' to handle undefined in the UI
+              onChange={(e) => setNewProject({ ...newProject, category: e.target.value === '' ? undefined : e.target.value as ProjectCategory })}
+              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            >
+              <option value="">Select Category</option>
+              <option value="Environmental">Environmental</option>
+              <option value="Social">Social</option>
+              <option value="Governance">Governance</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+            <select
+              value={newProject.status ?? ''} // Use ?? '' to handle undefined in the UI
+              onChange={(e) => setNewProject({ ...newProject, status: e.target.value === '' ? undefined : e.target.value as ProjectStatus })}
+              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            >
+              <option value="">Select Status</option>
+              <option value="Planning">Planning</option>
+              <option value="Active">Active</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Start Date</label>
+            <input
+              type="date"
+              value={newProject.start_date}
+              onChange={(e) => setNewProject({ ...newProject, start_date: e.target.value })}
+              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">End Date</label>
+            <input
+              type="date"
+              value={newProject.end_date || ''}
+              onChange={(e) =>
+                setNewProject({ ...newProject, end_date: e.target.value || null })
+              }
+              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Budget</label>
+            <input
+              type="number"
+              value={newProject.budget || 0}
+              onChange={(e) =>
+                setNewProject({ ...newProject, budget: parseInt(e.target.value) || 0 })
+              }
+              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Manager</label>
+            <input
+              type="text"
+              value={newProject.manager}
+              onChange={(e) => setNewProject({ ...newProject, manager: e.target.value })}
+              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="Enter the project manager's name"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">SDGs</label>
+            <input
+              type="text"
+              value={newProject.sdgs?.join(', ') || ''}
+              onChange={(e) =>
+                setNewProject({
+                  ...newProject,
+                  sdgs: e.target.value
+                    .split(',')
+                    .map((s) => parseInt(s.trim()))
+                    .filter((n) => !isNaN(n)),
+                })
+              }
+              placeholder="e.g., 7, 13"
+              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Image URL</label>
+            <input
+              type="text"
+              value={newProject.image_url || ''}
+              onChange={(e) =>
+                setNewProject({ ...newProject, image_url: e.target.value || null })
+              }
+              className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            />
+          </div>
 
-        <div className="bg-white shadow-lg rounded-lg p-6 sm:p-8">
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 animate-slide-in">
-              <AlertCircle className="w-5 h-5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {success && (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700 animate-slide-in">
-              <CheckCircle2 className="w-5 h-5" />
-              <span>Project created successfully!</span>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-8">
-            {/* Project Details */}
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Project Details</h2>
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Key Performance Indicators */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Key Performance Indicators
+            </label>
+            {newIndicators.map((indicator, index) => (
+              <div key={index} className="border border-gray-300 dark:border-gray-600 p-4 mt-2 rounded-md space-y-2">
                 <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">Project Name</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
                   <input
                     type="text"
-                    id="name"
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    aria-required="true"
+                    value={indicator.name || ''}
+                    onChange={(e) => updateNewIndicator(index, 'name', e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
                 <div>
-                  <label htmlFor="category" className="block text-sm font-medium text-gray-700">Category</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Value</label>
+                  <input
+                    type="number"
+                    value={indicator.value || 0}
+                    onChange={(e) =>
+                      updateNewIndicator(index, 'value', parseInt(e.target.value) || 0)
+                    }
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Unit</label>
+                  <input
+                    type="text"
+                    value={indicator.unit || ''}
+                    onChange={(e) => updateNewIndicator(index, 'unit', e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
                   <select
-                    id="category"
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value as ProjectFormData['category'] })}
-                    aria-required="true"
+                    value={indicator.category || ''}
+                    onChange={(e) => updateNewIndicator(index, 'category', e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   >
+                    <option value="">Select Category</option>
                     <option value="Environmental">Environmental</option>
                     <option value="Social">Social</option>
                     <option value="Governance">Governance</option>
                   </select>
                 </div>
-                <div>
-                  <label htmlFor="location" className="block text-sm font-medium text-gray-700">Location</label>
-                  <input
-                    type="text"
-                    id="location"
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                    value={formData.location}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    aria-required="true"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="manager" className="block text-sm font-medium text-gray-700">Project Manager</label>
-                  <input
-                    type="text"
-                    id="manager"
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                    value={formData.manager}
-                    onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
-                    aria-required="true"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="start_date" className="block text-sm font-medium text-gray-700">Start Date</label>
-                  <input
-                    type="date"
-                    id="start_date"
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                    value={formData.start_date}
-                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                    aria-required="true"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="end_date" className="block text-sm font-medium text-gray-700">End Date (Optional)</label>
-                  <input
-                    type="date"
-                    id="end_date"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                    value={formData.end_date || ''}
-                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value || null })}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="budget" className="block text-sm font-medium text-gray-700">Budget (IDR)</label>
-                  <input
-                    type="number"
-                    id="budget"
-                    required
-                    min="0"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                    value={formData.budget}
-                    onChange={(e) => setFormData({ ...formData, budget: Number(e.target.value) })}
-                    aria-required="true"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="sdgs" className="block text-sm font-medium text-gray-700">SDGs (comma-separated, 1-17)</label>
-                  <input
-                    type="text"
-                    id="sdgs"
-                    placeholder="e.g., 1,3,7"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                    value={formData.sdgs.join(',')}
-                    onChange={(e) => {
-                      const sdgs = e.target.value
-                        .split(',')
-                        .map(s => Number(s.trim()))
-                        .filter(s => !isNaN(s));
-                      setFormData({ ...formData, sdgs });
-                    }}
-                  />
-                </div>
-                <div className="sm:col-span-2 lg:col-span-3">
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700">Description</label>
-                  <textarea
-                    id="description"
-                    rows={4}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                    value={formData.description || ''}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value || null })}
-                  />
-                </div>
               </div>
-            </div>
-
-            {/* Indicators */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-800">CSR Indicators</h2>
-                <button
-                  type="button"
-                  onClick={addIndicator}
-                  className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700"
-                >
-                  <Plus className="w-5 h-5" />
-                  Add Indicator
-                </button>
-              </div>
-
-              {indicators.length === 0 ? (
-                <p className="text-gray-500">No indicators added. Click "Add Indicator" to start.</p>
-              ) : (
-                <>
-                  {/* Indicator Summary */}
-                  <div className="mb-4 p-4 bg-gray-100 rounded-lg">
-                    <h3 className="text-sm font-medium text-gray-700">Indicator Summary</h3>
-                    <ul className="mt-2 space-y-1">
-                      {indicators.map((indicator, index) => (
-                        <li key={index} className="text-sm text-gray-600">
-                          {indicator.name || `Indicator ${index + 1}`}: {indicator.value} {indicator.unit} ({indicator.category})
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Indicator Forms */}
-                  {indicators.map((indicator, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg mb-4 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => toggleIndicator(index)}
-                        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100"
-                        aria-expanded={expandedIndicator === index}
-                      >
-                        <span className="font-medium text-gray-800">
-                          {indicator.name || `Indicator ${index + 1}`}
-                        </span>
-                        <div className="flex items-center gap-4">
-                          <span className="text-sm text-gray-600">
-                            {indicator.value} {indicator.unit}
-                          </span>
-                          {expandedIndicator === index ? (
-                            <ChevronUp className="w-5 h-5 text-gray-600" />
-                          ) : (
-                            <ChevronDown className="w-5 h-5 text-gray-600" />
-                          )}
-                        </div>
-                      </button>
-                      {expandedIndicator === index && (
-                        <div className="p-4 bg-white">
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <div>
-                              <label htmlFor={`indicator-name-${index}`} className="block text-sm font-medium text-gray-700">
-                                Name
-                              </label>
-                              <input
-                                type="text"
-                                id={`indicator-name-${index}`}
-                                required
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                                value={indicator.name}
-                                onChange={(e) => updateIndicator(index, 'name', e.target.value)}
-                                aria-required="true"
-                              />
-                            </div>
-                            <div>
-                              <label htmlFor={`indicator-value-${index}`} className="block text-sm font-medium text-gray-700">
-                                Value
-                              </label>
-                              <input
-                                type="number"
-                                id={`indicator-value-${index}`}
-                                required
-                                min="0"
-                                step="0.01"
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                                value={indicator.value}
-                                onChange={(e) => updateIndicator(index, 'value', Number(e.target.value))}
-                                aria-required="true"
-                              />
-                            </div>
-                            <div>
-                              <label htmlFor={`indicator-unit-${index}`} className="block text-sm font-medium text-gray-700">
-                                Unit
-                              </label>
-                              <input
-                                type="text"
-                                id={`indicator-unit-${index}`}
-                                required
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                                value={indicator.unit}
-                                onChange={(e) => updateIndicator(index, 'unit', e.target.value)}
-                                aria-required="true"
-                              />
-                            </div>
-                            <div>
-                              <label htmlFor={`indicator-category-${index}`} className="block text-sm font-medium text-gray-700">
-                                Category
-                              </label>
-                              <select
-                                id={`indicator-category-${index}`}
-                                required
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                                value={indicator.category}
-                                onChange={(e) => updateIndicator(index, 'category', e.target.value as IndicatorFormData['category'])}
-                                aria-required="true"
-                              >
-                                <option value="Environmental">Environmental</option>
-                                <option value="Social">Social</option>
-                                <option value="Governance">Governance</option>
-                              </select>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeIndicator(index)}
-                            className="mt-4 flex items-center gap-2 text-red-600 hover:text-red-800"
-                          >
-                            <Trash2 className="w-5 h-5" />
-                            Remove Indicator
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={loading}
-                className={`px-6 py-2 rounded-md text-white ${
-                  loading ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'
-                }`}
-              >
-                {loading ? 'Creating...' : 'Create Project'}
-              </button>
-            </div>
-          </form>
+            ))}
+            <button
+              onClick={addNewIndicator}
+              className="mt-2 text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              Add Indicator
+            </button>
+          </div>
+        </div>
+        <div className="mt-6 flex justify-end space-x-2">
+          <button
+            onClick={() => navigate('/projects')}
+            className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-md text-gray-900 dark:text-gray-100"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleCreate}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Create
+          </button>
         </div>
       </div>
-      <style>{`
-        @keyframes slide-in {
-          from { transform: translateY(-10px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        .animate-slide-in { animation: slide-in 0.3s ease-out; }
-      `}</style>
     </div>
   );
-}
+};
+
+export default CreateProject;

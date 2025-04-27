@@ -1,21 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { Tables, Enums } from '../types/supabase';
 
-export interface Project {
-  id: string;
-  name: string;
-  description: string;
-  location: string;
-  category: 'Environmental' | 'Social' | 'Governance';
-  status: 'Planning' | 'Active' | 'Completed' | 'Cancelled';
-  start_date: string;
-  end_date: string | null;
-  created_at: string;
-  budget: number;
-  manager: string;
-  sdgs?: number[]; // Sustainable Development Goals
-  image_url?: string;
-}
+// Define type aliases for clarity
+type Project = Tables<"projects">;
+type ProjectCategory = Enums<"project_category">;
+type ProjectStatus = Enums<"project_status">;
 
 export function useProjects() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -29,88 +19,18 @@ export function useProjects() {
   async function fetchProjects() {
     try {
       setLoading(true);
-      
-      // This would be a real Supabase query in production
-      // For demo purposes, we'll use mock data
-      const mockProjects: Project[] = [
-        {
-          id: '1',
-          name: 'Clean Water Initiative',
-          description: 'Providing clean water access to rural communities',
-          location: 'Eastern Region',
-          category: 'Environmental',
-          status: 'Active',
-          start_date: '2023-06-01',
-          end_date: '2023-12-31',
-          created_at: '2023-05-15',
-          budget: 250000,
-          manager: 'Jane Smith',
-          sdgs: [6, 3],
-          image_url: 'https://images.pexels.com/photos/1327430/pexels-photo-1327430.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2'
-        },
-        {
-          id: '2',
-          name: 'Youth Education Program',
-          description: 'Improving access to quality education for underprivileged youth',
-          location: 'Western District',
-          category: 'Social',
-          status: 'Active',
-          start_date: '2023-03-15',
-          end_date: '2024-03-14',
-          created_at: '2023-02-20',
-          budget: 175000,
-          manager: 'Michael Johnson',
-          sdgs: [4, 10],
-          image_url: 'https://images.pexels.com/photos/8466617/pexels-photo-8466617.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2'
-        },
-        {
-          id: '3',
-          name: 'Renewable Energy Transition',
-          description: 'Supporting local businesses in adopting renewable energy solutions',
-          location: 'Northern Province',
-          category: 'Environmental',
-          status: 'Planning',
-          start_date: '2023-09-01',
-          end_date: null,
-          created_at: '2023-07-10',
-          budget: 500000,
-          manager: 'Sarah Williams',
-          sdgs: [7, 13],
-          image_url: 'https://images.pexels.com/photos/9875441/pexels-photo-9875441.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2'
-        },
-        {
-          id: '4',
-          name: 'Sustainable Agriculture',
-          description: 'Training farmers in sustainable farming practices',
-          location: 'Southern Region',
-          category: 'Environmental',
-          status: 'Completed',
-          start_date: '2022-05-01',
-          end_date: '2023-04-30',
-          created_at: '2022-04-10',
-          budget: 320000,
-          manager: 'David Brown',
-          sdgs: [2, 12, 15],
-          image_url: 'https://images.pexels.com/photos/2886937/pexels-photo-2886937.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2'
-        },
-        {
-          id: '5',
-          name: 'Community Health Outreach',
-          description: 'Providing healthcare services to underserved communities',
-          location: 'Central District',
-          category: 'Social',
-          status: 'Active',
-          start_date: '2023-02-01',
-          end_date: '2023-12-31',
-          created_at: '2023-01-10',
-          budget: 280000,
-          manager: 'Lisa Chen',
-          sdgs: [3],
-          image_url: 'https://images.pexels.com/photos/6647037/pexels-photo-6647037.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2'
-        }
-      ];
-      
-      setProjects(mockProjects);
+      setError(null);
+
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setProjects(data || []);
     } catch (err) {
       setError(err as Error);
       console.error('Error fetching projects:', err);
@@ -119,19 +39,36 @@ export function useProjects() {
     }
   }
 
-  async function createProject(projectData: Omit<Project, 'id' | 'created_at'>) {
+  async function createProject(projectData: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'created_by'>) {
     try {
       setLoading(true);
-      
-      // This would interact with Supabase in a real app
-      const newProject: Project = {
-        ...projectData,
-        id: Date.now().toString(),
-        created_at: new Date().toISOString(),
-      };
-      
-      setProjects([...projects, newProject]);
-      return { data: newProject, error: null };
+      setError(null);
+
+      const { data: authData, error: authError } = await supabase.auth.getSession();
+      if (authError || !authData.session) {
+        throw new Error('You must be logged in to create a project');
+      }
+
+      const createdBy = authData.session.user.id;
+      const now = new Date().toISOString();
+
+      const { data, error } = await supabase
+        .from('projects')
+        .insert({
+          ...projectData,
+          created_by: createdBy,
+          created_at: now,
+          updated_at: now,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setProjects([data, ...projects]);
+      return { data, error: null };
     } catch (err) {
       console.error('Error creating project:', err);
       return { data: null, error: err as Error };
@@ -143,13 +80,24 @@ export function useProjects() {
   async function updateProject(id: string, updates: Partial<Project>) {
     try {
       setLoading(true);
-      
-      const updatedProjects = projects.map(project => 
-        project.id === id ? { ...project, ...updates } : project
-      );
-      
-      setProjects(updatedProjects);
-      return { data: updatedProjects.find(p => p.id === id), error: null };
+      setError(null);
+
+      const { data, error } = await supabase
+        .from('projects')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setProjects(projects.map(project => (project.id === id ? data : project)));
+      return { data, error: null };
     } catch (err) {
       console.error('Error updating project:', err);
       return { data: null, error: err as Error };
@@ -161,10 +109,18 @@ export function useProjects() {
   async function deleteProject(id: string) {
     try {
       setLoading(true);
-      
-      const filteredProjects = projects.filter(project => project.id !== id);
-      setProjects(filteredProjects);
-      
+      setError(null);
+
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setProjects(projects.filter(project => project.id !== id));
       return { error: null };
     } catch (err) {
       console.error('Error deleting project:', err);
@@ -175,7 +131,23 @@ export function useProjects() {
   }
 
   async function getProjectById(id: string) {
-    return projects.find(project => project.id === id) || null;
+    const project = projects.find(project => project.id === id);
+    if (project) {
+      return project;
+    }
+
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching project by ID:', error);
+      return null;
+    }
+
+    return data || null;
   }
 
   return {

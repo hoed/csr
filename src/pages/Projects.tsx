@@ -1,153 +1,285 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { FolderPlus, Search, Filter, ArrowDownUp, AlertCircle } from 'lucide-react';
-import ProjectCard from '../components/projects/ProjectCard';
+import { supabase } from '../lib/supabase';
 import { useProjects } from '../hooks/useProjects';
+import { Link } from 'react-router-dom';
+import { Tables, Enums } from '../types/supabase';
+
+// Define type aliases for clarity
+type Project = Omit<Tables<"projects">, "category" | "status"> & {
+  category?: Enums<"project_category"> | null;
+  status?: Enums<"project_status"> | null;
+};
+type ProjectCategory = Enums<"project_category">;
+type ProjectStatus = Enums<"project_status">;
 
 const Projects = () => {
-  const { projects, loading, error, refetch } = useProjects();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [sortBy, setSortBy] = useState('name');
+  const { projects, loading: projectsLoading } = useProjects();
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const filteredProjects = projects
-    .filter(project => 
-      (searchTerm === '' || 
-        project.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        (project.description || '').toLowerCase().includes(searchTerm.toLowerCase())
-      ) &&
-      (categoryFilter === '' || project.category === categoryFilter) &&
-      (statusFilter === '' || project.status === statusFilter)
-    )
-    .sort((a, b) => {
-      if (sortBy === 'name') {
-        return a.name.localeCompare(b.name);
-      } else if (sortBy === 'date') {
-        return new Date(b.start_date).getTime() - new Date(a.start_date).getTime();
-      } else if (sortBy === 'budget') {
-        return b.budget - a.budget;
-      }
-      return 0;
-    });
+  // Handle editing a project
+  const handleEdit = (project: Project) => {
+    setEditingProject(project);
+    setIsEditModalOpen(true);
+  };
+
+  // Handle updating a project
+  const handleUpdate = async () => {
+    if (!editingProject) return;
+
+    const { error } = await supabase
+      .from('projects')
+      .update({
+        name: editingProject.name,
+        description: editingProject.description,
+        location: editingProject.location,
+        category: editingProject.category,
+        status: editingProject.status,
+        start_date: editingProject.start_date,
+        end_date: editingProject.end_date,
+        budget: editingProject.budget,
+        manager: editingProject.manager,
+        sdgs: editingProject.sdgs,
+        image_url: editingProject.image_url,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', editingProject.id);
+
+    if (error) {
+      console.error('Error updating project:', error);
+      alert('Failed to update project');
+      return;
+    }
+
+    alert('Project updated successfully');
+    setIsEditModalOpen(false);
+    setEditingProject(null);
+  };
+
+  if (projectsLoading) {
+    return <div>Loading...</div>;
+  }
 
   return (
-    <div>
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
-          <p className="mt-1 text-gray-600">Manage your impact projects</p>
-        </div>
+    <div className="p-6">
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Projects</h1>
+
+      {/* Link to Create Project Page */}
+      <div className="mb-6">
         <Link
           to="/projects/new"
-          className="btn-primary mt-4 sm:mt-0"
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
         >
-          <FolderPlus size={18} className="mr-2" />
-          New Project
+          Create New Project
         </Link>
       </div>
 
-      {error && (
-        <div className="mb-4 p-4 bg-error-50 text-error-700 rounded-lg flex items-center gap-2">
-          <AlertCircle className="w-5 h-5" />
-          <span>{error}</span>
-          <button
-            onClick={refetch}
-            className="ml-4 text-sm text-primary-600 hover:text-primary-700"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search size={18} className="text-gray-400" />
-            </div>
-            <input
-              type="text"
-              className="form-input pl-10"
-              placeholder="Search projects..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Filter size={18} className="text-gray-400" />
-            </div>
-            <select
-              className="form-select pl-10"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
-              <option value="">All Categories</option>
-              <option value="Environmental">Environmental</option>
-              <option value="Social">Social</option>
-              <option value="Governance">Governance</option>
-            </select>
-          </div>
-          
-          <div>
-            <select
-              className="form-select"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="">All Statuses</option>
-              <option value="Planning">Planning</option>
-              <option value="Active">Active</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </div>
-          
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <ArrowDownUp size={18} className="text-gray-400" />
-            </div>
-            <select
-              className="form-select pl-10"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-            >
-              <option value="name">Sort by Name</option>
-              <option value="date">Sort by Date</option>
-              <option value="budget">Sort by Budget</option>
-            </select>
-          </div>
-        </div>
+      {/* Projects Table */}
+      <div className="overflow-x-auto">
+        <table className="min-w-full border border-gray-200 dark:border-gray-700">
+          <thead>
+            <tr className="bg-gray-50 dark:bg-gray-800">
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Name</th>
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Description</th>
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Location</th>
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Category</th>
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Status</th>
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Budget</th>
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Manager</th>
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {projects.map((project) => (
+              <tr key={project.id} className="border-t dark:border-gray-700">
+                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{project.name}</td>
+                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{project.description}</td>
+                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{project.location}</td>
+                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{project.category}</td>
+                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{project.status}</td>
+                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{project.budget.toLocaleString()}</td>
+                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{project.manager}</td>
+                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
+                  <button
+                    onClick={() => handleEdit(project)}
+                    className="text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    Edit
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      {/* Project Grid */}
-      {loading ? (
-        <div className="flex justify-center py-10">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
-        </div>
-      ) : filteredProjects.length === 0 ? (
-        <div className="bg-white p-8 rounded-lg shadow-sm border border-gray-100 text-center">
-          <div className="text-gray-400 mb-4">
-            <FolderPlus size={48} className="mx-auto" />
+      {/* Edit Project Modal */}
+      {isEditModalOpen && editingProject && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg max-w-lg w-full">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Edit Project</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                <input
+                  type="text"
+                  value={editingProject.name}
+                  onChange={(e) =>
+                    setEditingProject({ ...editingProject, name: e.target.value })
+                  }
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                <textarea
+                  value={editingProject.description || ''}
+                  onChange={(e) =>
+                    setEditingProject({ ...editingProject, description: e.target.value })
+                  }
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Location</label>
+                <input
+                  type="text"
+                  value={editingProject.location}
+                  onChange={(e) =>
+                    setEditingProject({ ...editingProject, location: e.target.value })
+                  }
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+                <select
+                  value={editingProject.category ?? ''} // Handle undefined
+                  onChange={(e) =>
+                    setEditingProject({ ...editingProject, category: e.target.value === '' ? undefined : e.target.value as ProjectCategory })
+                  }
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="">Select Category</option>
+                  <option value="Environmental">Environmental</option>
+                  <option value="Social">Social</option>
+                  <option value="Governance">Governance</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+                <select
+                  value={editingProject.status ?? ''} // Handle undefined
+                  onChange={(e) =>
+                    setEditingProject({ ...editingProject, status: e.target.value === '' ? undefined : e.target.value as ProjectStatus })
+                  }
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="">Select Status</option>
+                  <option value="Planning">Planning</option>
+                  <option value="Active">Active</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Start Date</label>
+                <input
+                  type="date"
+                  value={editingProject.start_date}
+                  onChange={(e) =>
+                    setEditingProject({ ...editingProject, start_date: e.target.value })
+                  }
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">End Date</label>
+                <input
+                  type="date"
+                  value={editingProject.end_date || ''}
+                  onChange={(e) =>
+                    setEditingProject({
+                      ...editingProject,
+                      end_date: e.target.value || null,
+                    })
+                  }
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Budget</label>
+                <input
+                  type="number"
+                  value={editingProject.budget}
+                  onChange={(e) =>
+                    setEditingProject({
+                      ...editingProject,
+                      budget: parseInt(e.target.value) || 0,
+                    })
+                  }
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Manager</label>
+                <input
+                  type="text"
+                  value={editingProject.manager}
+                  onChange={(e) =>
+                    setEditingProject({ ...editingProject, manager: e.target.value })
+                  }
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">SDGs</label>
+                <input
+                  type="text"
+                  value={editingProject.sdgs?.join(', ') || ''}
+                  onChange={(e) =>
+                    setEditingProject({
+                      ...editingProject,
+                      sdgs: e.target.value
+                        .split(',')
+                        .map((s) => parseInt(s.trim()))
+                        .filter((n) => !isNaN(n)),
+                    })
+                  }
+                  placeholder="e.g., 7, 13"
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Image URL</label>
+                <input
+                  type="text"
+                  value={editingProject.image_url || ''}
+                  onChange={(e) =>
+                    setEditingProject({
+                      ...editingProject,
+                      image_url: e.target.value || null,
+                    })
+                  }
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md p-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end space-x-2">
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-md text-gray-900 dark:text-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdate}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Save
+              </button>
+            </div>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No projects found</h3>
-          <p className="text-gray-600 mb-4">
-            {searchTerm || categoryFilter || statusFilter ? 
-              'Try adjusting your filters or search terms' : 
-              'Get started by creating your first project'}
-          </p>
-          <Link to="/projects/new" className="btn-primary">
-            Create Project
-          </Link>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProjects.map(project => (
-            <ProjectCard key={project.id} project={project} />
-          ))}
         </div>
       )}
     </div>
