@@ -1,0 +1,32 @@
+{
+  "common": {
+    "loading": "Memuat...",
+    "error": "Terjadi kesalahan",
+    "save": "Simpan",
+    "cancel": "Batal",
+    "delete": "Hapus",
+    "edit": "Ubah",
+    "create": "Buat",
+    "submit": "Kirim",
+    "back": "Kembali"
+  },
+  "auth": {
+    "login": "Masuk",
+    "register": "Daftar",
+    "logout": "Keluar",
+    "email": "Email",
+    "password": "Kata Sandi",
+    "forgotPassword": "Lupa kata sandi?",
+    "noAccount": "Belum punya akun?",
+    "hasAccount": "Sudah punya akun?"
+  },
+  "navigation": {
+    "dashboard": "Dasbor",
+    "projects": "Proyek",
+    "indicators": "Indikator",
+    "reports": "Laporan",
+    "forms": "Formulir",
+    "settings": "Pengaturan",
+    "manual": "Panduan"
+  }
+}

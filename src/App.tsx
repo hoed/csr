@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth, AuthProvider } from './hooks/useAuth';
+import { useTheme } from './hooks/useTheme';
 
 // Layouts
 import DashboardLayout from './layouts/DashboardLayout';
@@ -19,7 +20,7 @@ import Manual from './pages/Manual';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import NotFound from './pages/NotFound';
-import { Analytics } from "@vercel/analytics/react"
+import SDGAlignment from './pages/SDGAlignment';
 
 // Route protection component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -39,33 +40,46 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
+  const { theme } = useTheme();
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
   return (
     <AuthProvider>
-      <Routes>
-        {/* Auth Routes */}
-        <Route path="/login" element={<AuthLayout><Login /></AuthLayout>} />
-        <Route path="/register" element={<AuthLayout><Register /></AuthLayout>} />
-        
-        {/* Protected Dashboard Routes */}
-        <Route path="/" element={
-          <ProtectedRoute>
-            <DashboardLayout />
-          </ProtectedRoute>
-        }>
-          <Route index element={<Dashboard />} />
-          <Route path="projects" element={<Projects />} />
-          <Route path="projects/new" element={<CreateProject />} />
-          <Route path="projects/:id" element={<ProjectDetail />} />
-          <Route path="indicators" element={<Indicators />} />
-          <Route path="reports" element={<Reports />} />
-          <Route path="forms" element={<Forms />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="manual" element={<Manual />} />
-        </Route>
-        
-        {/* 404 Route */}
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <div className={`min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100`}>
+        <Routes>
+          {/* Auth Routes */}
+          <Route path="/login" element={<AuthLayout><Login /></AuthLayout>} />
+          <Route path="/register" element={<AuthLayout><Register /></AuthLayout>} />
+          
+          {/* Protected Dashboard Routes */}
+          <Route path="/" element={
+            <ProtectedRoute>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<Dashboard />} />
+            <Route path="projects" element={<Projects />} />
+            <Route path="projects/new" element={<CreateProject />} />
+            <Route path="projects/:id" element={<ProjectDetail />} />
+            <Route path="indicators" element={<Indicators />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="forms" element={<Forms />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="manual" element={<Manual />} />
+            <Route path="sdg-alignment" element={<SDGAlignment />} />
+          </Route>
+          
+          {/* 404 Route */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </div>
     </AuthProvider>
   );
 }
