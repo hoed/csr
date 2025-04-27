@@ -19,6 +19,7 @@ interface Project {
   status: string;
   created_by: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 interface Indicator {
@@ -29,6 +30,7 @@ interface Indicator {
   unit: string;
   category: string;
   created_at: string;
+  updated_at: string;
 }
 
 export default function ProjectDetails() {
@@ -61,48 +63,30 @@ export default function ProjectDetails() {
       return;
     }
 
-    console.log('Mengambil proyek dengan ID:', id); // Debug
-
     const fetchProjectDetails = async () => {
       try {
         const timeout = setTimeout(() => {
           setError('Permintaan timeout. Silakan coba lagi.');
           setLoading(false);
-        }, 10000); // 10 seconds
+        }, 10000);
 
-        // Fetch project
-        console.log('Mengkueri tabel projects...');
         const { data: projectData, error: projectError } = await supabase
           .from('projects')
           .select('*')
           .eq('id', id)
           .single();
 
-        if (projectError) {
-          console.error('Kesalahan kueri proyek:', projectError);
-          throw new Error(`Gagal mengambil proyek: ${projectError.message}`);
-        }
+        if (projectError) throw new Error(`Gagal mengambil proyek: ${projectError.message}`);
 
-        if (!projectData) {
-          throw new Error('Proyek tidak ditemukan');
-        }
+        if (!projectData) throw new Error('Proyek tidak ditemukan');
 
-        console.log('Data proyek:', projectData); // Debug
-
-        // Fetch indicators
-        console.log('Mengkueri tabel project_indicators...');
         const { data: indicatorData, error: indicatorError } = await supabase
           .from('project_indicators')
           .select('*')
           .eq('project_id', id)
           .order('created_at', { ascending: false });
 
-        if (indicatorError) {
-          console.error('Kesalahan kueri indikator:', indicatorError);
-          throw new Error(`Gagal mengambil indikator: ${indicatorError.message}`);
-        }
-
-        console.log('Data indikator:', indicatorData); // Debug
+        if (indicatorError) throw new Error(`Gagal mengambil indikator: ${indicatorError.message}`);
 
         setProject(projectData);
         setIndicators(indicatorData || []);
@@ -117,6 +101,34 @@ export default function ProjectDetails() {
     };
 
     fetchProjectDetails();
+
+    // Real-time subscriptions
+    const projectSubscription = supabase
+      .channel('projects')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'projects', filter: `id=eq.${id}` }, (payload) => {
+        setProject(payload.new as Project);
+      })
+      .subscribe();
+
+    const indicatorSubscription = supabase
+      .channel('project_indicators')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_indicators', filter: `project_id=eq.${id}` }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setIndicators((prev) => [payload.new as Indicator, ...prev]);
+        } else if (payload.eventType === 'UPDATE') {
+          setIndicators((prev) =>
+            prev.map((ind) => (ind.id === payload.new.id ? (payload.new as Indicator) : ind))
+          );
+        } else if (payload.eventType === 'DELETE') {
+          setIndicators((prev) => prev.filter((ind) => ind.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(projectSubscription);
+      supabase.removeChannel(indicatorSubscription);
+    };
   }, [id, user]);
 
   if (loading) {

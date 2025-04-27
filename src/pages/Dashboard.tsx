@@ -1,36 +1,135 @@
-import React from 'react';
-import { Users, BarChart3, Landmark, TrendingUp, Globe, FileText } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Users, BarChart3, Landmark, TrendingUp, Globe } from 'lucide-react';
 import StatCard from '../components/dashboard/StatCard';
 import ImpactChart from '../components/dashboard/ImpactChart';
 import { useProjects } from '../hooks/useProjects';
 import { useIndicators } from '../hooks/useIndicators';
+import { supabase } from '../lib/supabase';
+
+// Define interfaces matching the updated schema
+interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+  location: string;
+  category: string;
+  status: string;
+  start_date: string;
+  end_date: string | null;
+  budget: number;
+  manager: string;
+  sdgs: number[] | null;
+  image_url: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Indicator {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string;
+  category: string;
+  unit: string;
+  target_value: number;
+  current_value: number | null; // Updated to allow null
+  start_value: number;
+  sdg_goals: number[] | null;
+  data_collection_method: string;
+  frequency: string;
+  created_at: string;
+  updated_at: string | null;
+  created_by: string | null;
+}
+
+interface ProjectSDG {
+  id: string;
+  project_id: string;
+  sdg_number: number;
+  contribution_level: 'direct' | 'indirect';
+  description: string;
+  created_at: string;
+  created_by: string;
+}
+
+// Define ChartData type to match ImpactChart expectations
+interface ChartData {
+  name: string;
+  [key: string]: string | number;
+}
 
 const Dashboard = () => {
-  const { projects, loading: projectsLoading } = useProjects();
-  const { indicators, loading: indicatorsLoading } = useIndicators();
+  const { projects } = useProjects();
+  const { indicators } = useIndicators();
+  const [projectSDGs, setProjectSDGs] = useState<ProjectSDG[]>([]);
 
-  const beneficiaryData = [
-    { name: 'Jan', beneficiaries: 2400 },
-    { name: 'Feb', beneficiaries: 2800 },
-    { name: 'Mar', beneficiaries: 3200 },
-    { name: 'Apr', beneficiaries: 4000 },
-    { name: 'May', beneficiaries: 4500 },
-    { name: 'Jun', beneficiaries: 4800 },
-    { name: 'Jul', beneficiaries: 5200 },
-    { name: 'Aug', beneficiaries: 5800 },
-  ];
+  // Currency formatter for IDR
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+    }).format(value);
 
-  const sdgData = [
-    { name: 'SDG 1', progress: 45 },
-    { name: 'SDG 2', progress: 65 },
-    { name: 'SDG 3', progress: 80 },
-    { name: 'SDG 4', progress: 72 },
-    { name: 'SDG 5', progress: 50 },
-    { name: 'SDG 6', progress: 90 },
-    { name: 'SDG 7', progress: 30 },
-  ];
+  // Fetch project_sdgs
+  useEffect(() => {
+    const fetchProjectSDGs = async () => {
+      const { data, error } = await supabase
+        .from('project_sdgs')
+        .select('*');
+      if (error) {
+        console.error('Error fetching project SDGs:', error);
+        return;
+      }
+      setProjectSDGs(data || []);
+    };
+    fetchProjectSDGs();
 
-  const projectStatus = [
+    // Real-time subscription for project_sdgs
+    const subscription = supabase
+      .channel('project_sdgs')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_sdgs' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setProjectSDGs((prev) => [...prev, payload.new as ProjectSDG]);
+        } else if (payload.eventType === 'UPDATE') {
+          setProjectSDGs((prev) =>
+            prev.map((sdg) => (sdg.id === payload.new.id ? (payload.new as ProjectSDG) : sdg))
+          );
+        } else if (payload.eventType === 'DELETE') {
+          setProjectSDGs((prev) => prev.filter((sdg) => sdg.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, []);
+
+  // Calculate Beneficiaries Growth (using current_value for indicators related to people)
+  const beneficiaryData: ChartData[] = indicators
+    .filter(ind => ind.unit === 'people' || ind.name.toLowerCase().includes('beneficiaries'))
+    .map((ind, idx) => ({
+      name: `Data ${idx + 1}`,
+      beneficiaries: ind.current_value ?? 0, // Fallback to 0 if null
+    }));
+
+  // Calculate SDG Progress (based on project_sdgs)
+  const sdgData: ChartData[] = projectSDGs.reduce((acc, sdg) => {
+    const existing = acc.find(item => item.name === `SDG ${sdg.sdg_number}`);
+    if (existing) {
+      existing.progress = (Number(existing.progress) || 0) + (sdg.contribution_level === 'direct' ? 50 : 25);
+    } else {
+      acc.push({
+        name: `SDG ${sdg.sdg_number}`,
+        progress: sdg.contribution_level === 'direct' ? 50 : 25,
+      });
+    }
+    return acc;
+  }, [] as ChartData[]);
+
+  const projectStatus: ChartData[] = [
     { name: 'Planning', value: projects?.filter(p => p.status === 'Planning').length || 0 },
     { name: 'Active', value: projects?.filter(p => p.status === 'Active').length || 0 },
     { name: 'Completed', value: projects?.filter(p => p.status === 'Completed').length || 0 },
@@ -38,7 +137,7 @@ const Dashboard = () => {
   ];
 
   // Calculate ESG Distribution data
-  const esgData = [
+  const esgData: ChartData[] = [
     { 
       name: 'Environmental', 
       projects: projects?.filter(p => p.category === 'Environmental').length || 0,
@@ -62,6 +161,11 @@ const Dashboard = () => {
     },
   ];
 
+  // Calculate total beneficiaries from indicators
+  const totalBeneficiaries = indicators
+    .filter(ind => ind.unit === 'people' || ind.name.toLowerCase().includes('beneficiaries'))
+    .reduce((sum, ind) => sum + (ind.current_value ?? 0), 0);
+
   return (
     <div>
       <div className="mb-6">
@@ -73,7 +177,7 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard 
           title="Total Beneficiaries" 
-          value="5,825" 
+          value={totalBeneficiaries.toLocaleString()} 
           change={12}
           icon={<Users size={20} />}
           variant="primary"
@@ -87,7 +191,7 @@ const Dashboard = () => {
         />
         <StatCard 
           title="Impact Budget" 
-          value={`$${(projects?.reduce((sum, p) => sum + p.budget, 0) || 0).toLocaleString()}`} 
+          value={formatCurrency(projects?.reduce((sum, p) => sum + p.budget, 0) || 0)} 
           change={5}
           icon={<Landmark size={20} />}
           variant="accent"
@@ -149,19 +253,16 @@ const Dashboard = () => {
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
           <div className="space-y-4">
-            {[
-              { icon: <Globe size={16} />, text: 'Clean Water Initiative added 200 new beneficiaries', time: '2 hours ago' },
-              { icon: <BarChart3 size={16} />, text: 'CO2 Reduction target updated to 12,000 metric tons', time: '1 day ago' },
-              { icon: <Users size={16} />, text: 'Youth Education Program completed quarterly assessment', time: '2 days ago' },
-              { icon: <FileText size={16} />, text: 'New impact report generated for Sustainable Agriculture', time: '3 days ago' },
-            ].map((activity, index) => (
+            {indicators.slice(0, 4).map((indicator, index) => (
               <div key={index} className="flex">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center text-primary-600 mr-3">
-                  {activity.icon}
+                  <Globe size={16} />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-700">{activity.text}</p>
-                  <p className="text-xs text-gray-500 mt-1">{activity.time}</p>
+                  <p className="text-sm text-gray-700">
+                    {projects.find(p => p.id === indicator.project_id)?.name || 'Unknown Project'} updated {indicator.name} to {indicator.current_value ?? 0} {indicator.unit}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">{new Date(indicator.created_at).toLocaleString()}</p>
                 </div>
               </div>
             ))}
@@ -171,27 +272,18 @@ const Dashboard = () => {
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Pending Reports</h3>
           <div className="space-y-3">
-            {[
-              { name: 'Q3 Impact Summary', due: 'Sep 30, 2023', project: 'Clean Water Initiative', status: 'Urgent' },
-              { name: 'Monthly Progress Report', due: 'Sep 15, 2023', project: 'Youth Education Program', status: 'Due Soon' },
-              { name: 'ESG Compliance Report', due: 'Oct 10, 2023', project: 'All Projects', status: 'Upcoming' },
-              { name: 'Beneficiary Feedback Summary', due: 'Oct 15, 2023', project: 'Community Health Outreach', status: 'Upcoming' },
-            ].map((report, index) => (
+            {projects.map((project, index) => (
               <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
                 <div>
-                  <p className="text-sm font-medium text-gray-800">{report.name}</p>
+                  <p className="text-sm font-medium text-gray-800">{project.name} Report</p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Due: {report.due} • {report.project}
+                    Due: {new Date(project.end_date || Date.now()).toLocaleDateString()} • {project.name}
                   </p>
                 </div>
                 <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
-                  report.status === 'Urgent' 
-                    ? 'bg-error-100 text-error-800' 
-                    : report.status === 'Due Soon' 
-                      ? 'bg-warning-100 text-warning-800' 
-                      : 'bg-gray-100 text-gray-800'
+                  project.status === 'Active' ? 'bg-warning-100 text-warning-800' : 'bg-gray-100 text-gray-800'
                 }`}>
-                  {report.status}
+                  {project.status === 'Active' ? 'Due Soon' : 'Upcoming'}
                 </span>
               </div>
             ))}

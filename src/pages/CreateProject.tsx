@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
@@ -26,13 +26,6 @@ interface IndicatorFormData {
   category: 'Environmental' | 'Social' | 'Governance';
 }
 
-// Default CSR indicators
-const defaultIndicators: IndicatorFormData[] = [
-  { name: 'Carbon Emissions Reduced', value: 0, unit: 'tons CO2e', category: 'Environmental' },
-  { name: 'Jobs Created', value: 0, unit: 'jobs', category: 'Social' },
-  { name: 'Compliance Rate', value: 0, unit: '%', category: 'Governance' },
-];
-
 export default function CreateProject() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -40,6 +33,7 @@ export default function CreateProject() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [expandedIndicator, setExpandedIndicator] = useState<number | null>(null);
+  const [projects, setProjects] = useState<ProjectFormData[]>([]);
 
   const initialFormData: ProjectFormData = {
     name: '',
@@ -56,7 +50,25 @@ export default function CreateProject() {
   };
 
   const [formData, setFormData] = useState<ProjectFormData>(initialFormData);
-  const [indicators, setIndicators] = useState<IndicatorFormData[]>(defaultIndicators);
+  const [indicators, setIndicators] = useState<IndicatorFormData[]>([
+    { name: 'Carbon Emissions Reduced', value: 0, unit: 'tons CO2e', category: 'Environmental' },
+    { name: 'Jobs Created', value: 0, unit: 'jobs', category: 'Social' },
+    { name: 'Compliance Rate', value: 0, unit: '%', category: 'Governance' },
+  ]);
+
+  // Real-time subscription for projects
+  useEffect(() => {
+    const subscription = supabase
+      .channel('projects')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'projects' }, (payload) => {
+        setProjects((prev) => [...prev, payload.new as ProjectFormData]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, []);
 
   const validateForm = (data: ProjectFormData, indicators: IndicatorFormData[]) => {
     if (!data.name) return 'Project name is required';
@@ -262,7 +274,7 @@ export default function CreateProject() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="budget" className="block text-sm font-medium text-gray-700">Budget</label>
+                  <label htmlFor="budget" className="block text-sm font-medium text-gray-700">Budget (IDR)</label>
                   <input
                     type="number"
                     id="budget"
