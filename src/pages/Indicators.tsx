@@ -3,6 +3,27 @@ import { useIndicators } from '../hooks/useIndicators';
 import { useProjects } from '../hooks/useProjects';
 import { supabase } from '../lib/supabase';
 import { Tables, Enums } from '../types/supabase';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 // Define interface matching the project_indicators schema
 interface Indicator extends Tables<"project_indicators"> {}
@@ -27,6 +48,17 @@ interface NewIndicatorForm {
   frequency?: Enums<"measurement_frequency"> | null; // For indicators
 }
 
+// Mock function to simulate fetching historical data
+const fetchHistoricalData = async (indicatorId: string | number) => {
+  // Replace this with your actual data fetching logic
+  await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate API call
+  const randomData = Array.from({ length: 5 }, (_, i) => ({
+    date: `2025-04-${20 + i}`,
+    value: Math.floor(Math.random() * 100),
+  }));
+  return randomData;
+};
+
 const Indicators = () => {
   const { indicators: kpiIndicators, loading: indicatorsLoading } = useIndicators();
   const { projects, loading: projectsLoading } = useProjects();
@@ -49,6 +81,7 @@ const Indicators = () => {
     data_collection_method: '',
     frequency: null,
   });
+  const [historicalData, setHistoricalData] = useState<{ [indicatorId: string]: { date: string; value: number }[] }>({});
 
   // Fetch project_indicators
   useEffect(() => {
@@ -93,6 +126,22 @@ const Indicators = () => {
       supabase.removeChannel(subscription);
     };
   }, []);
+
+  // Fetch historical data for indicators
+  useEffect(() => {
+    const fetchData = async () => {
+      const kpiData: { [indicatorId: string]: { date: string; value: number }[] } = {};
+      for (const indicator of kpiIndicators) {
+        const data = await fetchHistoricalData(indicator.id);
+        kpiData[indicator.id] = data;
+      }
+      setHistoricalData(kpiData);
+    };
+
+    if (kpiIndicators.length > 0) {
+      fetchData();
+    }
+  }, [kpiIndicators]);
 
   // Handle editing an indicator
   const handleEdit = (indicator: Indicator | KPIIndicator) => {
@@ -274,6 +323,31 @@ const Indicators = () => {
                 const progress = indicator.target_value !== null && indicator.target_value > 0
                   ? Math.min(((indicator.current_value ?? 0) / indicator.target_value) * 100, 100)
                   : 0;
+
+                // Chart data
+                const chartData = {
+                  labels: historicalData[indicator.id]?.map((data) => data.date) || [],
+                  datasets: [
+                    {
+                      label: 'Value',
+                      data: historicalData[indicator.id]?.map((data) => data.value) || [],
+                      fill: false,
+                      backgroundColor: 'rgb(75, 192, 192)',
+                      borderColor: 'rgba(75, 192, 192, 0.2)',
+                    },
+                  ],
+                };
+
+                const chartOptions = {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                    },
+                  },
+                };
+
                 return (
                   <div
                     key={indicator.id}
@@ -307,6 +381,10 @@ const Indicators = () => {
                             style={{ width: `${progress}%` }}
                           ></div>
                         </div>
+                      </div>
+                      {/* Chart */}
+                      <div style={{ height: '200px' }}>
+                        <Line data={chartData} options={chartOptions} />
                       </div>
                       <div className="flex flex-wrap gap-2 mb-4">
                         <span
@@ -347,6 +425,31 @@ const Indicators = () => {
             {projectIndicators.map((indicator) => {
               const project = projects.find((p) => p.id === indicator.project_id);
               const progress = Math.min(indicator.value ?? 0, 100);
+
+              // Chart data
+              const chartData = {
+                labels: historicalData[indicator.id]?.map((data) => data.date) || [],
+                datasets: [
+                  {
+                    label: 'Value',
+                    data: historicalData[indicator.id]?.map((data) => data.value) || [],
+                    fill: false,
+                    backgroundColor: 'rgb(75, 192, 192)',
+                    borderColor: 'rgba(75, 192, 192, 0.2)',
+                  },
+                ],
+              };
+
+              const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                  },
+                },
+              };
+
               return (
                 <div
                   key={indicator.id}
@@ -380,6 +483,10 @@ const Indicators = () => {
                           style={progress ? { width: `${progress}%` } : { width: '0%' }}
                         ></div>
                       </div>
+                    </div>
+                    {/* Chart */}
+                    <div style={{ height: '200px' }}>
+                      <Line data={chartData} options={chartOptions} />
                     </div>
                     <div className="flex flex-wrap gap-2 mb-4">
                       <span
