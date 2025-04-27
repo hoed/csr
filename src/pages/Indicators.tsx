@@ -10,12 +10,45 @@ interface Indicator extends Tables<"project_indicators"> {}
 // Since useIndicators might return indicators from the indicators table, define its type separately
 type KPIIndicator = Tables<"indicators">;
 
+// Define the form state for creating a new indicator
+interface NewIndicatorForm {
+  type: 'project_indicators' | 'indicators';
+  name: string;
+  project_id: string;
+  category: string | Enums<"indicator_category">;
+  unit: string;
+  value?: number; // For project_indicators
+  current_value?: number | null; // For indicators
+  description?: string | null; // For indicators
+  target_value?: number | null; // For indicators
+  start_value?: number | null; // For indicators
+  sdg_goals?: number[] | null; // For indicators
+  data_collection_method?: string | null; // For indicators
+  frequency?: Enums<"measurement_frequency"> | null; // For indicators
+}
+
 const Indicators = () => {
   const { indicators: kpiIndicators, loading: indicatorsLoading } = useIndicators();
   const { projects, loading: projectsLoading } = useProjects();
   const [projectIndicators, setProjectIndicators] = useState<Indicator[]>([]);
   const [editingIndicator, setEditingIndicator] = useState<Indicator | KPIIndicator | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newIndicator, setNewIndicator] = useState<NewIndicatorForm>({
+    type: 'project_indicators',
+    name: '',
+    project_id: '',
+    category: '',
+    unit: '',
+    value: 0,
+    current_value: null,
+    description: '',
+    target_value: null,
+    start_value: null,
+    sdg_goals: [],
+    data_collection_method: '',
+    frequency: null,
+  });
 
   // Fetch project_indicators
   useEffect(() => {
@@ -112,6 +145,99 @@ const Indicators = () => {
     setEditingIndicator(null);
   };
 
+  // Handle creating a new indicator
+  const handleCreate = async () => {
+    // Validate required fields
+    if (!newIndicator.name) {
+      alert('Name is required');
+      return;
+    }
+    if (!newIndicator.project_id) {
+      alert('Project is required');
+      return;
+    }
+    if (!newIndicator.unit) {
+      alert('Unit is required');
+      return;
+    }
+    if (!newIndicator.category) {
+      alert('Category is required');
+      return;
+    }
+
+    if (newIndicator.type === 'project_indicators') {
+      const { error } = await supabase.from('project_indicators').insert({
+        name: newIndicator.name,
+        project_id: newIndicator.project_id,
+        category: newIndicator.category as string,
+        unit: newIndicator.unit,
+        value: newIndicator.value ?? 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      if (error) {
+        console.error('Error creating project indicator:', error);
+        alert('Failed to create project indicator');
+        return;
+      }
+    } else {
+      // Validate additional required fields for indicators
+      if (!newIndicator.start_value && newIndicator.start_value !== 0) {
+        alert('Start Value is required for Key Performance Indicators');
+        return;
+      }
+      if (!newIndicator.data_collection_method) {
+        alert('Data Collection Method is required for Key Performance Indicators');
+        return;
+      }
+      if (!newIndicator.frequency) {
+        alert('Frequency is required for Key Performance Indicators');
+        return;
+      }
+
+      const { error } = await supabase.from('indicators').insert({
+        name: newIndicator.name,
+        project_id: newIndicator.project_id,
+        category: newIndicator.category as Enums<"indicator_category">,
+        unit: newIndicator.unit,
+        description: newIndicator.description || null,
+        target_value: newIndicator.target_value,
+        current_value: newIndicator.current_value,
+        start_value: newIndicator.start_value,
+        sdg_goals: newIndicator.sdg_goals?.length ? newIndicator.sdg_goals : null,
+        data_collection_method: newIndicator.data_collection_method,
+        frequency: newIndicator.frequency,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      if (error) {
+        console.error('Error creating indicator:', error);
+        alert('Failed to create indicator');
+        return;
+      }
+    }
+
+    alert('Indicator created successfully');
+    setIsCreateModalOpen(false);
+    setNewIndicator({
+      type: 'project_indicators',
+      name: '',
+      project_id: '',
+      category: '',
+      unit: '',
+      value: 0,
+      current_value: null,
+      description: '',
+      target_value: null,
+      start_value: null,
+      sdg_goals: [],
+      data_collection_method: '',
+      frequency: null,
+    });
+  };
+
   if (indicatorsLoading || projectsLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -123,9 +249,17 @@ const Indicators = () => {
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8">
-          Indicators
-        </h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+            Indicators
+          </h1>
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition duration-200"
+          >
+            Create Indicator
+          </button>
+        </div>
 
         {/* Key Performance Indicators Section */}
         <div className="mb-12">
@@ -145,7 +279,7 @@ const Indicators = () => {
                     key={indicator.id}
                     className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-lg"
                   >
-                    <div className="p-6"> {/* Increased padding to balance the card */}
+                    <div className="p-6">
                       <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
                         {indicator.name}
                       </h3>
@@ -218,7 +352,7 @@ const Indicators = () => {
                   key={indicator.id}
                   className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-lg"
                 >
-                  <div className="p-6"> {/* Increased padding to balance the card */}
+                  <div className="p-6">
                     <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
                       {indicator.name}
                     </h3>
@@ -496,6 +630,271 @@ const Indicators = () => {
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200"
                 >
                   Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create Indicator Modal */}
+        {isCreateModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-start justify-center z-50 overflow-y-auto">
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-xl max-w-lg w-full mx-4 my-8 shadow-2xl transform transition-all duration-300">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
+                Create Indicator
+              </h2>
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Indicator Type
+                  </label>
+                  <select
+                    value={newIndicator.type}
+                    onChange={(e) => {
+                      const type = e.target.value as 'project_indicators' | 'indicators';
+                      setNewIndicator({
+                        ...newIndicator,
+                        type,
+                        category: type === 'project_indicators' ? '' : 'Quantitative',
+                        frequency: type === 'project_indicators' ? null : 'Daily',
+                      });
+                    }}
+                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                  >
+                    <option value="project_indicators">Project Indicator</option>
+                    <option value="indicators">Key Performance Indicator</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Project
+                  </label>
+                  <select
+                    value={newIndicator.project_id}
+                    onChange={(e) =>
+                      setNewIndicator({ ...newIndicator, project_id: e.target.value })
+                    }
+                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                  >
+                    <option value="">Select a Project</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newIndicator.name}
+                    onChange={(e) =>
+                      setNewIndicator({ ...newIndicator, name: e.target.value })
+                    }
+                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                  />
+                </div>
+                {newIndicator.type === 'indicators' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Description
+                    </label>
+                    <textarea
+                      value={newIndicator.description || ''}
+                      onChange={(e) =>
+                        setNewIndicator({ ...newIndicator, description: e.target.value })
+                      }
+                      className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                      rows={3}
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Category
+                  </label>
+                  {newIndicator.type === 'project_indicators' ? (
+                    <input
+                      type="text"
+                      value={newIndicator.category}
+                      onChange={(e) =>
+                        setNewIndicator({ ...newIndicator, category: e.target.value })
+                      }
+                      className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                    />
+                  ) : (
+                    <select
+                      value={newIndicator.category}
+                      onChange={(e) =>
+                        setNewIndicator({
+                          ...newIndicator,
+                          category: e.target.value as Enums<"indicator_category">,
+                        })
+                      }
+                      className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                    >
+                      <option value="Quantitative">Quantitative</option>
+                      <option value="Qualitative">Qualitative</option>
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Unit
+                  </label>
+                  <input
+                    type="text"
+                    value={newIndicator.unit}
+                    onChange={(e) =>
+                      setNewIndicator({ ...newIndicator, unit: e.target.value })
+                    }
+                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                  />
+                </div>
+                {newIndicator.type === 'indicators' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Target Value
+                    </label>
+                    <input
+                      type="number"
+                      value={newIndicator.target_value ?? ''}
+                      onChange={(e) =>
+                        setNewIndicator({
+                          ...newIndicator,
+                          target_value: e.target.value ? parseInt(e.target.value) : null,
+                        })
+                      }
+                      className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Current Value
+                  </label>
+                  <input
+                    type="number"
+                    value={
+                      newIndicator.type === 'project_indicators'
+                        ? newIndicator.value ?? ''
+                        : newIndicator.current_value ?? ''
+                    }
+                    onChange={(e) => {
+                      const newValue = e.target.value ? parseInt(e.target.value) : null;
+                      if (newIndicator.type === 'project_indicators') {
+                        setNewIndicator({
+                          ...newIndicator,
+                          value: newValue ?? 0,
+                        });
+                      } else {
+                        setNewIndicator({
+                          ...newIndicator,
+                          current_value: newValue,
+                        });
+                      }
+                    }}
+                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                  />
+                </div>
+                {newIndicator.type === 'indicators' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Start Value
+                    </label>
+                    <input
+                      type="number"
+                      value={newIndicator.start_value ?? ''}
+                      onChange={(e) =>
+                        setNewIndicator({
+                          ...newIndicator,
+                          start_value: e.target.value ? parseInt(e.target.value) : null,
+                        })
+                      }
+                      className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                    />
+                  </div>
+                )}
+                {newIndicator.type === 'indicators' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      SDG Goals
+                    </label>
+                    <input
+                      type="text"
+                      value={newIndicator.sdg_goals?.join(', ') || ''}
+                      onChange={(e) =>
+                        setNewIndicator({
+                          ...newIndicator,
+                          sdg_goals: e.target.value
+                            .split(',')
+                            .map((s) => parseInt(s.trim()))
+                            .filter((n) => !isNaN(n)),
+                        })
+                      }
+                      placeholder="e.g., 7, 13"
+                      className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                    />
+                  </div>
+                )}
+                {newIndicator.type === 'indicators' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Data Collection Method
+                    </label>
+                    <input
+                      type="text"
+                      value={newIndicator.data_collection_method || ''}
+                      onChange={(e) =>
+                        setNewIndicator({
+                          ...newIndicator,
+                          data_collection_method: e.target.value,
+                        })
+                      }
+                      className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                    />
+                  </div>
+                )}
+                {newIndicator.type === 'indicators' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Frequency
+                    </label>
+                    <select
+                      value={newIndicator.frequency || ''}
+                      onChange={(e) =>
+                        setNewIndicator({
+                          ...newIndicator,
+                          frequency: e.target.value as Enums<"measurement_frequency">,
+                        })
+                      }
+                      className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                    >
+                      <option value="">Select Frequency</option>
+                      <option value="Daily">Daily</option>
+                      <option value="Weekly">Weekly</option>
+                      <option value="Monthly">Monthly</option>
+                      <option value="Quarterly">Quarterly</option>
+                      <option value="Annually">Annually</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="mt-8 flex justify-end space-x-3">
+                <button
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="px-6 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-500 transition duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreate}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition duration-200"
+                >
+                  Create
                 </button>
               </div>
             </div>
