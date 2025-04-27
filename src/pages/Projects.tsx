@@ -14,13 +14,13 @@ const Projects = () => {
   const [newProject, setNewProject] = useState<Partial<Project>>({
     name: '',
     description: '',
-    location: '', // Default to empty string
-    category: 'Environmental',
-    status: 'Planning',
+    location: '',
+    category: 'Environmental', // Set default value
+    status: 'Planning', // Set default value
     start_date: '',
     end_date: null,
     budget: 0,
-    manager: '', // Default to empty string
+    manager: '',
     sdgs: [],
     image_url: null,
   });
@@ -58,18 +58,18 @@ const Projects = () => {
     const projectData = {
       name: newProject.name,
       description: newProject.description || null,
-      location: newProject.location ?? '',
-      category: newProject.category ?? 'Environmental',
-      status: newProject.status ?? 'Planning',
-      start_date: newProject.start_date || '',
+      location: newProject.location || '',
+      category: newProject.category ?? 'Environmental', // Ensure non-null
+      status: newProject.status ?? 'Planning', // Ensure non-null
+      start_date: newProject.start_date || null,
       end_date: newProject.end_date || null,
-      budget: newProject.budget ?? 0,
-      manager: newProject.manager ?? '', // Ensure non-null
+      budget: newProject.budget || 0,
+      manager: newProject.manager || null,
       sdgs: newProject.sdgs?.length ? newProject.sdgs : null,
       image_url: newProject.image_url || null,
     };
 
-    const { error } = await createProject(projectData);
+    const { error } = await createProject({...projectData, manager: projectData.manager || '', start_date: projectData.start_date || ''});
 
     if (error) {
       alert('Failed to create project');
@@ -82,8 +82,8 @@ const Projects = () => {
       name: '',
       description: '',
       location: '',
-      category: 'Environmental',
-      status: 'Planning',
+      category: 'Environmental', // Reset to default
+      status: 'Planning', // Reset to default
       start_date: '',
       end_date: null,
       budget: 0,
@@ -211,7 +211,7 @@ const Projects = () => {
                   </label>
                   <input
                     type="text"
-                    value={newProject.location}
+                    value={newProject.location || ''}
                     onChange={(e) =>
                       setNewProject({ ...newProject, location: e.target.value })
                     }
@@ -302,7 +302,7 @@ const Projects = () => {
                   </label>
                   <input
                     type="text"
-                    value={newProject.manager}
+                    value={newProject.manager || ''}
                     onChange={(e) =>
                       setNewProject({ ...newProject, manager: e.target.value })
                     }
