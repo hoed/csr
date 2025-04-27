@@ -1,43 +1,40 @@
 import { useState, useEffect } from 'react';
-import { useProjects } from '../hooks/useProjects';
 import { supabase } from '../lib/supabase';
-import { Tables, Enums } from '../types/supabase';
+import { Tables } from '../types/supabase';
+import { Link } from 'react-router-dom'; // Import Link
 
-// Define type aliases for clarity
+// Define the Project type using Supabase schema
 type Project = Tables<"projects">;
-type ProjectCategory = Enums<"project_category">;
-type ProjectStatus = Enums<"project_status">;
 
 const Projects = () => {
-  const { projects, loading: projectsLoading, createProject } = useProjects();
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newProject, setNewProject] = useState<Partial<Project>>({
-    name: '',
-    description: '',
-    location: '',
-    category: 'Environmental', // Set default value
-    status: 'Planning', // Set default value
-    start_date: '',
-    end_date: null,
-    budget: 0,
-    manager: '',
-    sdgs: [],
-    image_url: null,
-  });
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  // Real-time subscription for projects
+  // Fetch projects
   useEffect(() => {
+    const fetchProjects = async () => {
+      const { data, error } = await supabase.from('projects').select('*');
+      if (error) {
+        console.error('Error fetching projects:', error);
+        return;
+      }
+      setProjects(data || []);
+    };
+    fetchProjects();
+
+    // Real-time subscription for projects
     const subscription = supabase
       .channel('projects')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, (payload) => {
         if (payload.eventType === 'INSERT') {
-          const newProject = payload.new as Project;
-          // Assuming useProjects updates the projects state, we don't need to update it here
+          setProjects((prev) => [...prev, payload.new as Project]);
         } else if (payload.eventType === 'UPDATE') {
-          const updatedProject = payload.new as Project;
-          // Assuming useProjects updates the projects state
+          setProjects((prev) =>
+            prev.map((proj) => (proj.id === payload.new.id ? payload.new as Project : proj))
+          );
         } else if (payload.eventType === 'DELETE') {
-          // Assuming useProjects updates the projects state
+          setProjects((prev) => prev.filter((proj) => proj.id !== payload.old.id));
         }
       })
       .subscribe();
@@ -47,53 +44,46 @@ const Projects = () => {
     };
   }, []);
 
-  // Handle creating a new project
-  const handleCreate = async () => {
-    // Validate required fields
-    if (!newProject.name) {
-      alert('Name is required');
-      return;
-    }
-
-    const projectData = {
-      name: newProject.name,
-      description: newProject.description || null,
-      location: newProject.location || '',
-      category: newProject.category ?? 'Environmental', // Ensure non-null
-      status: newProject.status ?? 'Planning', // Ensure non-null
-      start_date: newProject.start_date || null,
-      end_date: newProject.end_date || null,
-      budget: newProject.budget || 0,
-      manager: newProject.manager || null,
-      sdgs: newProject.sdgs?.length ? newProject.sdgs : null,
-      image_url: newProject.image_url || null,
-    };
-
-    const { error } = await createProject({...projectData, manager: projectData.manager || '', start_date: projectData.start_date || ''});
-
-    if (error) {
-      alert('Failed to create project');
-      return;
-    }
-
-    alert('Project created successfully');
-    setIsCreateModalOpen(false);
-    setNewProject({
-      name: '',
-      description: '',
-      location: '',
-      category: 'Environmental', // Reset to default
-      status: 'Planning', // Reset to default
-      start_date: '',
-      end_date: null,
-      budget: 0,
-      manager: '',
-      sdgs: [],
-      image_url: null,
-    });
+  // Handle editing a project
+  const handleEdit = (project: Project) => {
+    setEditingProject(project);
+    setIsEditModalOpen(true);
   };
 
-  if (projectsLoading) {
+  // Handle updating a project
+  const handleUpdate = async () => {
+    if (!editingProject) return;
+
+    const { error } = await supabase
+      .from('projects')
+      .update({
+        name: editingProject.name,
+        description: editingProject.description,
+        location: editingProject.location,
+        category: editingProject.category,
+        status: editingProject.status,
+        start_date: editingProject.start_date,
+        end_date: editingProject.end_date,
+        budget: editingProject.budget,
+        manager: editingProject.manager,
+        sdgs: editingProject.sdgs,
+        image_url: editingProject.image_url,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', editingProject.id);
+
+    if (error) {
+      console.error('Error updating project:', error);
+      alert('Failed to update project');
+      return;
+    }
+
+    alert('Project updated successfully');
+    setIsEditModalOpen(false);
+    setEditingProject(null);
+  };
+
+  if (!projects) {
     return (
       <div className="flex justify-center items-center h-screen">
         <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-blue-600"></div>
@@ -104,79 +94,94 @@ const Projects = () => {
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+        <div className="mb-8 flex justify-between items-center"> {/* Modified this line */}
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
             Projects
           </h1>
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition duration-200"
-          >
-            Create Project
-          </button>
+          <Link to="/projects/new"> {/* Added Link component */}
+            <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition duration-200">
+              Add New Project
+            </button>
+          </Link>
         </div>
 
-        {/* Projects Section */}
-        <div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => (
-              <div
-                key={project.id}
-                className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-lg"
-              >
-                <div className="p-6">
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                    {project.name}
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm mb-4 line-clamp-2">
-                    {project.description || 'No description available.'}
-                  </p>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    <p>
-                      <span className="font-medium">Location:</span>{' '}
-                      {project.location || 'Not specified'}
-                    </p>
-                    <p>
-                      <span className="font-medium">Category:</span>{' '}
-                      {project.category || 'Not specified'}
-                    </p>
-                    <p>
-                      <span className="font-medium">Status:</span>{' '}
-                      {project.status || 'Not specified'}
-                    </p>
-                    <p>
-                      <span className="font-medium">Start Date:</span>{' '}
-                      {project.start_date || 'Not specified'}
-                    </p>
-                    <p>
-                      <span className="font-medium">End Date:</span>{' '}
-                      {project.end_date || 'Not specified'}
-                    </p>
-                    <p>
-                      <span className="font-medium">Budget:</span>{' '}
-                      {project.budget ? `$${project.budget}` : 'Not specified'}
-                    </p>
-                    <p>
-                      <span className="font-medium">Manager:</span>{' '}
-                      {project.manager || 'Not specified'}
-                    </p>
-                    <p>
-                      <span className="font-medium">SDGs:</span>{' '}
-                      {project.sdgs?.join(', ') || 'None'}
-                    </p>
-                  </div>
-                </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {projects.map((project) => (
+            <div
+              key={project.id}
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-lg"
+            >
+              <div className="h-48 w-full overflow-hidden">
+                <img
+                  src={
+                    project.image_url ||
+                    'https://via.placeholder.com/400x200?text=No+Image+Available'
+                  }
+                  alt={project.name}
+                  className="w-full h-full object-cover"
+                />
               </div>
-            ))}
-          </div>
+              <div className="p-5">
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  {project.name}
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 text-sm mb-4 line-clamp-2">
+                  {project.description || 'No description available.'}
+                </p>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <span
+                    className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
+                      project.category === 'Environmental'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        : project.category === 'Social'
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                        : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                    }`}
+                  >
+                    {project.category}
+                  </span>
+                  <span
+                    className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
+                      project.status === 'Active'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        : project.status === 'Completed'
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                        : project.status === 'Planning'
+                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                    }`}
+                  >
+                    {project.status}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  <p>
+                    <span className="font-medium">Location:</span> {project.location}
+                  </p>
+                  <p>
+                    <span className="font-medium">Manager:</span> {project.manager}
+                  </p>
+                  <p>
+                    <span className="font-medium">Budget:</span> ${project.budget.toLocaleString()}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleEdit(project)}
+                  className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition duration-300"
+                >
+                  Edit Project
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* Create Project Modal */}
-        {isCreateModalOpen && (
+        {/* Edit Project Modal */}
+        {isEditModalOpen && editingProject && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-start justify-center z-50 overflow-y-auto">
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-xl max-w-lg w-full mx-4 my-8 shadow-2xl transform transition-all duration-300">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-lg sm:max-w-md mx-4 my-8 shadow-2xl transform transition-all duration-300">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
-                Create Project
+                Edit Project
               </h2>
               <div className="space-y-5">
                 <div>
@@ -185,9 +190,9 @@ const Projects = () => {
                   </label>
                   <input
                     type="text"
-                    value={newProject.name}
+                    value={editingProject.name}
                     onChange={(e) =>
-                      setNewProject({ ...newProject, name: e.target.value })
+                      setEditingProject({ ...editingProject, name: e.target.value })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                   />
@@ -197,9 +202,9 @@ const Projects = () => {
                     Description
                   </label>
                   <textarea
-                    value={newProject.description || ''}
+                    value={editingProject.description || ''}
                     onChange={(e) =>
-                      setNewProject({ ...newProject, description: e.target.value })
+                      setEditingProject({ ...editingProject, description: e.target.value })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                     rows={3}
@@ -211,9 +216,9 @@ const Projects = () => {
                   </label>
                   <input
                     type="text"
-                    value={newProject.location || ''}
+                    value={editingProject.location}
                     onChange={(e) =>
-                      setNewProject({ ...newProject, location: e.target.value })
+                      setEditingProject({ ...editingProject, location: e.target.value })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                   />
@@ -223,12 +228,9 @@ const Projects = () => {
                     Category
                   </label>
                   <select
-                    value={newProject.category}
+                    value={editingProject.category}
                     onChange={(e) =>
-                      setNewProject({
-                        ...newProject,
-                        category: e.target.value as ProjectCategory,
-                      })
+                      setEditingProject({ ...editingProject, category: e.target.value as 'Environmental' | 'Social' | 'Governance' })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                   >
@@ -242,12 +244,9 @@ const Projects = () => {
                     Status
                   </label>
                   <select
-                    value={newProject.status}
+                    value={editingProject.status}
                     onChange={(e) =>
-                      setNewProject({
-                        ...newProject,
-                        status: e.target.value as ProjectStatus,
-                      })
+                      setEditingProject({ ...editingProject, status: e.target.value as 'Planning' | 'Active' | 'Completed' | 'Cancelled' })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                   >
@@ -263,9 +262,9 @@ const Projects = () => {
                   </label>
                   <input
                     type="date"
-                    value={newProject.start_date || ''}
+                    value={editingProject.start_date}
                     onChange={(e) =>
-                      setNewProject({ ...newProject, start_date: e.target.value })
+                      setEditingProject({ ...editingProject, start_date: e.target.value })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                   />
@@ -276,9 +275,9 @@ const Projects = () => {
                   </label>
                   <input
                     type="date"
-                    value={newProject.end_date || ''}
+                    value={editingProject.end_date || ''}
                     onChange={(e) =>
-                      setNewProject({ ...newProject, end_date: e.target.value || null })
+                      setEditingProject({ ...editingProject, end_date: e.target.value || null })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                   />
@@ -289,9 +288,12 @@ const Projects = () => {
                   </label>
                   <input
                     type="number"
-                    value={newProject.budget || 0}
+                    value={editingProject.budget}
                     onChange={(e) =>
-                      setNewProject({ ...newProject, budget: parseInt(e.target.value) || 0 })
+                      setEditingProject({
+                        ...editingProject,
+                        budget: parseInt(e.target.value) || 0,
+                      })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                   />
@@ -302,24 +304,23 @@ const Projects = () => {
                   </label>
                   <input
                     type="text"
-                    value={newProject.manager || ''}
+                    value={editingProject.manager}
                     onChange={(e) =>
-                      setNewProject({ ...newProject, manager: e.target.value })
+                      setEditingProject({ ...editingProject, manager: e.target.value })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
-                    placeholder="Enter the project manager's name"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    SDGs
+                    SDG Goals
                   </label>
                   <input
                     type="text"
-                    value={newProject.sdgs?.join(', ') || ''}
+                    value={editingProject.sdgs?.join(', ') || ''}
                     onChange={(e) =>
-                      setNewProject({
-                        ...newProject,
+                      setEditingProject({
+                        ...editingProject,
                         sdgs: e.target.value
                           .split(',')
                           .map((s) => parseInt(s.trim()))
@@ -330,19 +331,32 @@ const Projects = () => {
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Image URL
+                  </label>
+                  <input
+                    type="text"
+                    value={editingProject.image_url || ''}
+                    onChange={(e) =>
+                      setEditingProject({ ...editingProject, image_url: e.target.value || null })
+                    }
+                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                  />
+                </div>
               </div>
               <div className="mt-8 flex justify-end space-x-3">
                 <button
-                  onClick={() => setIsCreateModalOpen(false)}
+                  onClick={() => setIsEditModalOpen(false)}
                   className="px-6 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-500 transition duration-200"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleCreate}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition duration-200"
+                  onClick={handleUpdate}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200"
                 >
-                  Create
+                  Save
                 </button>
               </div>
             </div>
