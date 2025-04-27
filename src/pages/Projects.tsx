@@ -1,18 +1,47 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { useProjects } from '../hooks/useProjects';
-import { Link } from 'react-router-dom';
-import { Tables, Enums } from '../types/supabase';
+import { Tables } from '../types/supabase';
 
-// Define type aliases for clarity
+// Define the Project type using Supabase schema
 type Project = Tables<"projects">;
-type ProjectCategory = Enums<"project_category">;
-type ProjectStatus = Enums<"project_status">;
 
 const Projects = () => {
-  const { projects, loading: projectsLoading } = useProjects();
+  const [projects, setProjects] = useState<Project[]>([]);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // Fetch projects
+  useEffect(() => {
+    const fetchProjects = async () => {
+      const { data, error } = await supabase.from('projects').select('*');
+      if (error) {
+        console.error('Error fetching projects:', error);
+        return;
+      }
+      setProjects(data || []);
+    };
+    fetchProjects();
+
+    // Real-time subscription for projects
+    const subscription = supabase
+      .channel('projects')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setProjects((prev) => [...prev, payload.new as Project]);
+        } else if (payload.eventType === 'UPDATE') {
+          setProjects((prev) =>
+            prev.map((proj) => (proj.id === payload.new.id ? payload.new as Project : proj))
+          );
+        } else if (payload.eventType === 'DELETE') {
+          setProjects((prev) => prev.filter((proj) => proj.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, []);
 
   // Handle editing a project
   const handleEdit = (project: Project) => {
@@ -23,16 +52,6 @@ const Projects = () => {
   // Handle updating a project
   const handleUpdate = async () => {
     if (!editingProject) return;
-
-    // Validate required fields (safety net, as <select> ensures these are set)
-    if (!editingProject.category) {
-      alert('Please select a category');
-      return;
-    }
-    if (!editingProject.status) {
-      alert('Please select a status');
-      return;
-    }
 
     const { error } = await supabase
       .from('projects')
@@ -63,7 +82,7 @@ const Projects = () => {
     setEditingProject(null);
   };
 
-  if (projectsLoading) {
+  if (!projects) {
     return (
       <div className="flex justify-center items-center h-screen">
         <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-blue-600"></div>
@@ -74,26 +93,18 @@ const Projects = () => {
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+        <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-            Our Projects
+            Projects
           </h1>
-          <Link
-            to="/projects/new"
-            className="bg-blue-600 text-white px-6 py-2 rounded-full hover:bg-blue-700 transition duration-300 shadow-md"
-          >
-            Create New Project
-          </Link>
         </div>
 
-        {/* Projects Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => (
             <div
               key={project.id}
               className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-lg"
             >
-              {/* Project Image */}
               <div className="h-48 w-full overflow-hidden">
                 <img
                   src={
@@ -104,12 +115,11 @@ const Projects = () => {
                   className="w-full h-full object-cover"
                 />
               </div>
-              {/* Project Details */}
               <div className="p-5">
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
                   {project.name}
                 </h3>
-                <p className="text-gray-600 dark:text-gray-400 text-sm mb-4 line-clamp-3">
+                <p className="text-gray-600 dark:text-gray-400 text-sm mb-4 line-clamp-2">
                   {project.description || 'No description available.'}
                 </p>
                 <div className="flex flex-wrap gap-2 mb-4">
@@ -128,10 +138,10 @@ const Projects = () => {
                     className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
                       project.status === 'Active'
                         ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                        : project.status === 'Planning'
-                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
                         : project.status === 'Completed'
                         ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                        : project.status === 'Planning'
+                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
                         : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
                     }`}
                   >
@@ -140,14 +150,13 @@ const Projects = () => {
                 </div>
                 <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                   <p>
-                    <span className="font-medium">Budget:</span>{' '}
-                    {project.budget.toLocaleString()} USD
+                    <span className="font-medium">Location:</span> {project.location}
                   </p>
                   <p>
                     <span className="font-medium">Manager:</span> {project.manager}
                   </p>
                   <p>
-                    <span className="font-medium">Location:</span> {project.location}
+                    <span className="font-medium">Budget:</span> ${project.budget.toLocaleString()}
                   </p>
                 </div>
                 <button
@@ -163,8 +172,8 @@ const Projects = () => {
 
         {/* Edit Project Modal */}
         {isEditModalOpen && editingProject && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-xl max-w-2xl w-full mx-4 shadow-2xl transform transition-all duration-300">
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-start justify-center z-50 overflow-y-auto">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-lg sm:max-w-md mx-4 my-8 shadow-2xl transform transition-all duration-300">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
                 Edit Project
               </h2>
@@ -192,7 +201,7 @@ const Projects = () => {
                       setEditingProject({ ...editingProject, description: e.target.value })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
-                    rows={4}
+                    rows={3}
                   />
                 </div>
                 <div>
@@ -215,10 +224,7 @@ const Projects = () => {
                   <select
                     value={editingProject.category}
                     onChange={(e) =>
-                      setEditingProject({
-                        ...editingProject,
-                        category: e.target.value as ProjectCategory,
-                      })
+                      setEditingProject({ ...editingProject, category: e.target.value as 'Environmental' | 'Social' | 'Governance' })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                   >
@@ -234,10 +240,7 @@ const Projects = () => {
                   <select
                     value={editingProject.status}
                     onChange={(e) =>
-                      setEditingProject({
-                        ...editingProject,
-                        status: e.target.value as ProjectStatus,
-                      })
+                      setEditingProject({ ...editingProject, status: e.target.value as 'Planning' | 'Active' | 'Completed' | 'Cancelled' })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                   >
@@ -268,10 +271,7 @@ const Projects = () => {
                     type="date"
                     value={editingProject.end_date || ''}
                     onChange={(e) =>
-                      setEditingProject({
-                        ...editingProject,
-                        end_date: e.target.value || null,
-                      })
+                      setEditingProject({ ...editingProject, end_date: e.target.value || null })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                   />
@@ -307,7 +307,7 @@ const Projects = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    SDGs
+                    SDG Goals
                   </label>
                   <input
                     type="text"
@@ -333,10 +333,7 @@ const Projects = () => {
                     type="text"
                     value={editingProject.image_url || ''}
                     onChange={(e) =>
-                      setEditingProject({
-                        ...editingProject,
-                        image_url: e.target.value || null,
-                      })
+                      setEditingProject({ ...editingProject, image_url: e.target.value || null })
                     }
                     className="block w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
                   />
