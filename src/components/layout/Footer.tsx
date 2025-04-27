@@ -16,7 +16,7 @@ const Footer: React.FC = () => {
             <span>by ImpactMonitor Team</span>
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            © {currentYear} ImpactMonitor. All rights reserved.
+            © {currentYear} Hoed - ImpactMonitor. All rights reserved.
           </div>
         </div>
       </div>

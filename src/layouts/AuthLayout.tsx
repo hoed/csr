@@ -33,7 +33,7 @@ const AuthLayout = ({ children }: { children: React.ReactNode }) => {
           <div 
             className="absolute inset-0 bg-cover bg-center"
             style={{ 
-              backgroundImage: 'url(/images/login-bg.jpg)',
+              backgroundImage: 'url(/images/back.webp)',
               backgroundSize: 'cover',
               backgroundPosition: 'center'
             }}
