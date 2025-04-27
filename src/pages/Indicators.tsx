@@ -145,17 +145,7 @@ const Indicators = () => {
                     key={indicator.id}
                     className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-lg"
                   >
-                    <div className="h-48 w-full overflow-hidden">
-                      <img
-                        src={
-                          project?.image_url ||
-                          'https://via.placeholder.com/400x200?text=No+Image+Available'
-                        }
-                        alt={indicator.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="p-5">
+                    <div className="p-6"> {/* Increased padding to balance the card */}
                       <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
                         {indicator.name}
                       </h3>
@@ -228,17 +218,7 @@ const Indicators = () => {
                   key={indicator.id}
                   className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-lg"
                 >
-                  <div className="h-48 w-full overflow-hidden">
-                    <img
-                      src={
-                        project?.image_url ||
-                        'https://via.placeholder.com/400x200?text=No+Image+Available'
-                      }
-                      alt={indicator.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="p-5">
+                  <div className="p-6"> {/* Increased padding to balance the card */}
                     <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
                       {indicator.name}
                     </h3>
